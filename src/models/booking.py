@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class BookingDates(BaseModel):
@@ -89,3 +89,22 @@ class AuthTokenResponse(BaseModel):
     """Response from POST /auth."""
 
     token: str = Field(..., min_length=1, description="Session token for privileged operations.")
+
+
+class PartialBookingPayload(BaseModel):
+    """
+    Payload model for PATCH /booking/{id}.
+
+    All fields are optional — only provided fields are sent to the API.
+    extra="forbid" ensures unknown fields raise ValidationError before any
+    HTTP call is made, keeping PATCH in line with the full PUT contract.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    firstname: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    lastname: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    totalprice: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+    depositpaid: Optional[bool] = None
+    bookingdates: Optional[BookingDates] = None
+    additionalneeds: Optional[str] = Field(default=None, max_length=500)

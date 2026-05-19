@@ -23,6 +23,7 @@ from src.models.booking import (
     BookingResponse,
     BookingSummary,
     CreateBookingResponse,
+    PartialBookingPayload,
 )
 from src.utils.logger import get_logger
 
