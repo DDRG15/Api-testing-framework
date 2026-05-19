@@ -130,6 +130,18 @@ class FrameworkSettings(BaseSettings):
     def strip_trailing_slash(cls, v: str) -> str:
         return v.rstrip("/")
 
+    @field_validator("api_base_url")
+    @classmethod
+    def enforce_https(cls, v: str) -> str:
+        is_local = "localhost" in v or "127.0.0.1" in v
+        if not is_local and not v.startswith("https://"):
+            raise ValueError(
+                f"API_BASE_URL must use HTTPS to prevent auth tokens from travelling "
+                f"in plaintext. Got: '{v}'. "
+                "Use https:// in production. http:// is only permitted for localhost."
+            )
+        return v
+
     @field_validator("ssl_ca_bundle")
     @classmethod
     def validate_ca_bundle_path(cls, v: Optional[str]) -> Optional[str]:

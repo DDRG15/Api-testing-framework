@@ -67,6 +67,10 @@ from config.settings import settings
 from src.utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from src.utils.logger import get_logger
 
+
+class SecurityError(RuntimeError):
+    """Raised when an operation would compromise transport security."""
+
 logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -267,6 +271,12 @@ class ApiClient:
 
     def set_auth_token(self, token: str) -> None:
         """Inject a session token for the lifetime of this client."""
+        is_local = "localhost" in self._base_url or "127.0.0.1" in self._base_url
+        if not is_local and not self._base_url.startswith("https://"):
+            raise SecurityError(
+                f"Refusing to set auth token on non-HTTPS base URL '{self._base_url}'. "
+                "Credentials would be transmitted in plaintext."
+            )
         self._session.headers["Cookie"] = f"token={token}"
 
     def close(self) -> None:
