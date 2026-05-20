@@ -20,6 +20,10 @@ allure-results/
 allure-report/
 .coverage
 coverage.xml
+htmlcov/
+
+# pre-commit cache
+.pre-commit-cache/
 
 # IDE
 .vscode/

@@ -41,6 +41,8 @@ htmlcov/
 # --- Documentation (not needed at runtime) ---
 README.md
 PORTFOLIO.md
+IMPLEMENTATION_PLAN.md
+EXECUTION_GUIDE.md
 docs/
 
 # --- Development configs ---

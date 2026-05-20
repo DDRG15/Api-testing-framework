@@ -22,7 +22,20 @@ This framework was built to demonstrate that understanding, end-to-end.
 
 ## Architecture Decisions and Their Financial Systems Justification
 
-### 1. Pydantic Models as API Contracts (`src/models/booking.py`)
+### 1. HTTPS Enforcement at Two Layers (`config/settings.py`, `src/client/base_client.py`)
+
+The framework advertises "STRICT SSL" in its module-level docstring. That claim was technically true — `verify=False` is architecturally blocked — but it had a gap: nothing prevented an operator from setting `API_BASE_URL=http://api.example.com`, at which point auth tokens would travel in plaintext regardless of SSL verification settings.
+
+Two enforcement points close this gap independently:
+
+- **Layer 1 — Settings validation:** `FrameworkSettings.enforce_https` runs at import time. Any non-localhost URL that is not `https://` raises `ValueError` before a single fixture executes. The process dies at startup with a clear error message. No test runs.
+- **Layer 2 — Client guard:** `ApiClient.set_auth_token()` raises `SecurityError` before injecting a `Cookie` header on any non-HTTPS, non-localhost base URL. This catches programmatically constructed clients that bypass settings entirely.
+
+**Financial relevance:** Bearer tokens and session cookies transmitted over HTTP are visible to any network observer on the path. In a regulated environment, transmitting auth credentials in plaintext is a compliance violation independent of whether the credentials are immediately misused. The enforcement must be architectural — not a convention a developer can forget.
+
+---
+
+### 2. Pydantic Models as API Contracts (`src/models/booking.py`)
 
 Every API response is deserialized through a Pydantic v2 model before any
 assertion runs. If a field is renamed, a type changes, or a required field
@@ -37,7 +50,7 @@ deserialization layer catches this class of regression immediately.
 
 ---
 
-### 2. Smart Retry with 429 / Retry-After Awareness (`src/client/base_client.py`)
+### 3. Smart Retry with 429 / Retry-After Awareness (`src/client/base_client.py`)
 
 The retry logic distinguishes between two fundamentally different failure classes:
 
@@ -62,7 +75,7 @@ will generate false-positive failures that erode trust in the entire test pipeli
 
 ---
 
-### 3. Circuit Breaker (`src/utils/circuit_breaker.py`)
+### 4. Circuit Breaker (`src/utils/circuit_breaker.py`)
 
 After a configurable number of consecutive failures, the circuit transitions to
 `OPEN` and all subsequent calls fail immediately without reaching the network.
@@ -76,7 +89,7 @@ is the test suite's contribution to system-wide stability during an outage.
 
 ---
 
-### 4. Structured JSON Logging with Secret Masking (`src/utils/logger.py`)
+### 5. Structured JSON Logging with Secret Masking (`src/utils/logger.py`)
 
 Every log line is a JSON object. No plain text. Every line carries:
 - `run_id`: unique per test-runner process invocation
@@ -98,7 +111,7 @@ in any SOC 2-compliant environment.
 
 ---
 
-### 5. SLO Enforcement as a First-Class Test Assertion
+### 6. SLO Enforcement as a First-Class Test Assertion
 
 Every HTTP response is checked against a configurable `SLO_RESPONSE_TIME_MS`
 threshold. A response that arrives with a 200 status but takes 8 seconds is
@@ -112,7 +125,7 @@ production SLAs.
 
 ---
 
-### 6. Data Idempotency and the Orphan Registry (`conftest.py`)
+### 7. Data Idempotency and the Orphan Registry (`conftest.py`)
 
 Test data is generated using Faker with UUID-fragment suffixes, ensuring zero
 collision probability across parallel runs and shared staging environments.
@@ -136,13 +149,13 @@ the same environment your tests just polluted.
 
 ---
 
-### 7. Faker-Based Synthetic Data (`src/utils/data_factory.py`)
+### 8. Faker-Based Synthetic Data (`src/utils/data_factory.py`)
 
 The `BookingDataFactory` generates four categories of test data:
 - `realistic()`: Human-looking names, realistic prices, random stay lengths
 - `max_length()`: Every string field at its maximum allowed length — truncation regression
 - `minimum_price()`: `totalprice = 0` — boundary value for financial amount fields
-- `unicode_names()`: Names from Japanese, Arabic, Chinese, and Russian locales
+- `unicode_names()`: Names from Japanese (`ja_JP`), Chinese (`zh_CN`), Arabic (`ar_EG`), and Russian (`ru_RU`) locales using valid Faker locale codes that produce actual non-Latin script
 
 The factory seed is logged on every test. Any failure is reproducible by
 passing the logged seed back to `BookingDataFactory(seed=<value>)`.
@@ -155,7 +168,7 @@ before production does.
 
 ---
 
-### 8. Containerisation with Non-Root User (`Dockerfile`, `docker-compose.yml`)
+### 9. Containerisation with Non-Root User (`Dockerfile`, `docker-compose.yml`)
 
 The test runner executes as uid 1001 (`testrunner`), not root. The Docker image
 uses a multi-stage build: a `deps` stage installs packages, the `runtime` stage
@@ -172,16 +185,14 @@ container environment cannot run in production-grade infrastructure.
 
 ---
 
-### 9. CI/CD Pipeline with Security Audit Gate (`.github/workflows/api-tests.yml`)
+### 10. CI/CD Pipeline with Security Audit Gate (`.github/workflows/api-tests.yml`)
 
-The pipeline has two sequential jobs:
-1. **`security-audit`**: `pip-audit` scans all dependencies for known CVEs.
-   The test job **cannot run** if this fails. Dependencies with unpatched
-   vulnerabilities are a build-time failure, not a runtime surprise.
-2. **`api-tests`**: Runs against the target environment. Secrets are validated
-   for presence before execution. All artifacts (JSONL logs, HTML report,
-   JUnit XML) are uploaded unconditionally — a passing run and a failing run
-   both produce a full audit trail.
+The pipeline enforces a strict sequential gate structure. Each stage must pass before the next executes:
+
+1. **`security-audit`**: `pip-audit` scans all pinned dependencies against the PyPI advisory database for known CVEs. A single unpatched vulnerability blocks the entire pipeline — dependency vulnerabilities are a build-time failure, not a runtime discovery.
+2. **`build-image`**: Multi-stage Docker image built with BuildKit and pushed to GHCR. The image is tagged with the exact commit SHA, making every test run's artifact traceable to the exact source revision.
+3. **`api-tests`**: Runs the full suite inside the immutable image from step 2. GitHub Secrets are injected as environment variables — never as CLI arguments (visible in `ps` output) or written to disk. All artifacts (JSONL logs, HTML report, JUnit XML) are uploaded unconditionally regardless of pass/fail.
+4. **`notify-regression-failure`**: On scheduled-run failures, a GitHub Issue is auto-created with labels `regression`, `automated`, `needs-triage`. The team is notified without requiring anyone to watch CI dashboards.
 
 **Financial relevance:** In a regulated financial environment (SOC 2, ISO 27001,
 PCI DSS), every software component must have a documented vulnerability management

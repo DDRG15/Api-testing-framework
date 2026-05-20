@@ -13,31 +13,35 @@ api-testing-framework/
 │
 ├── .github/
 │   └── workflows/
-│       └── api-tests.yml         # CI/CD pipeline with security audit gate
+│       └── api-tests.yml         # CI/CD pipeline: security-audit → build-image → api-tests
 │
 ├── config/
-│   └── settings.py               # Pydantic-validated config — fails at startup on bad config
+│   └── settings.py               # Pydantic-validated config — enforces HTTPS, fails at startup
 │
 ├── src/
 │   ├── client/
-│   │   ├── base_client.py        # Core HTTP client: retries, circuit breaker, SLO, logging
+│   │   ├── base_client.py        # Core HTTP client: retries, circuit breaker, SLO, SecurityError
 │   │   └── booking_client.py     # Domain client: typed methods returning Pydantic models
 │   ├── models/
-│   │   └── booking.py            # API contracts as Pydantic models — catches schema drift
+│   │   └── booking.py            # API contracts: BookingPayload, PartialBookingPayload, responses
 │   └── utils/
-│       ├── circuit_breaker.py          # In-memory circuit breaker (The Windows/Local Fallback)
-│       ├── circuit_breaker_redis.py    # Distributed Redis circuit breaker for parallel workers
+│       ├── circuit_breaker.py          # Public interface — selects in-memory or Redis impl
+│       ├── circuit_breaker_redis.py    # Distributed Redis circuit breaker with Lua atomicity
+│       ├── data_factory.py             # Faker-based synthetic data: realistic, edge-case, unicode
 │       └── logger.py                   # Structured JSON logger with secret masking
 │
 ├── tests/
 │   ├── functional/
-│   │   └── test_bookings_crud.py # Full CRUD lifecycle + idempotency tests
+│   │   ├── test_bookings_crud.py # Full CRUD lifecycle + idempotency + edge cases
+│   │   └── test_canary.py        # Single-threaded canary probe — smoke-marked, static payload
 │   └── contract/
 │       └── test_schema_contracts.py # Schema drift detection tests
 │
+├── IMPLEMENTATION_PLAN.md        # Overhaul tracking — checkbox per item, date when completed
+├── EXECUTION_GUIDE.md            # Exact code changes per commit group for resumable execution
 ├── conftest.py                   # Session/function fixtures, cross-platform filelock, teardown
 ├── pytest.ini                    # pytest config with global timeout and JUnit/HTML output
-├── requirements.txt
+├── requirements.txt              # All versions pinned — pip-audit gates every bump
 ├── .env.example                  # Template — copy to .env, never commit .env
 └── .gitignore
 ```
@@ -73,6 +77,8 @@ api-testing-framework/
 ### Security — Zero Trust
 - No credentials, tokens, or URLs in source code.
 - Pydantic `FrameworkSettings` reads exclusively from environment variables.
+- `API_BASE_URL` is validated at startup: any non-localhost URL that is not `https://` raises `ValueError` before a single test runs. The auth token is never transmitted over plaintext.
+- `set_auth_token()` enforces the same HTTPS check at the client level — belt-and-suspenders against programmatic bypass.
 - Sensitive headers (Authorization, Cookie, X-API-Key) are masked in logs.
 - SSL verification is architecturally non-negotiable — `verify=False` is impossible.
 
@@ -144,10 +150,10 @@ Configure these in: `Settings → Secrets and variables → Actions`
 | `SSL_CA_BUNDLE` | Optional path to custom CA bundle |
 
 ### Pipeline Stages
-1. **Security Audit** — `pip-audit` scans all dependencies for CVEs. Tests do not run against a compromised dependency tree.
-2. **API Tests** — Full suite runs. Secrets are injected as env vars, never as CLI arguments.
-3. **Artifact Upload** — Logs, HTML report, and JUnit XML are uploaded regardless of pass/fail.
-4. **PR Comment** — On failure in a PR, a comment is posted with a direct link to the failing run.
+1. **Security Audit** — `pip-audit` scans all dependencies for CVEs. Nothing proceeds if a vulnerability is found.
+2. **Docker Build** — Multi-stage image built and pushed to GHCR with BuildKit layer caching. Image is tagged with the commit SHA for exact traceability.
+3. **API Tests** — Full suite runs inside the built image. Secrets are injected as env vars, never written to disk or CLI arguments. Artifacts (JSONL logs, HTML report, JUnit XML) uploaded unconditionally.
+4. **Regression Notification** — On scheduled-run failure, a GitHub Issue is opened automatically with labels `regression`, `automated`, `needs-triage`.
 
 ---
 
