@@ -17,6 +17,8 @@ identifiable as "contract problem" vs "logic problem."
 """
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
@@ -32,7 +34,7 @@ class TestResponseSchemaContracts:
 
     def test_create_booking_response_matches_contract(
         self,
-        created_booking: tuple[int, any],
+        created_booking: tuple[int, Any],
         booking_client: BookingClient,
     ) -> None:
         """
@@ -48,7 +50,7 @@ class TestResponseSchemaContracts:
 
     def test_get_booking_response_matches_contract(
         self,
-        created_booking: tuple[int, any],
+        created_booking: tuple[int, Any],
         booking_client: BookingClient,
     ) -> None:
         """
@@ -93,7 +95,7 @@ class TestResponseSchemaContracts:
 
     def test_date_fields_are_properly_typed(
         self,
-        created_booking: tuple[int, any],
+        created_booking: tuple[int, Any],
         booking_client: BookingClient,
     ) -> None:
         """
