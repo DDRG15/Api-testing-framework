@@ -203,7 +203,7 @@ class BookingDataFactory:
         Financial systems must handle international customer names correctly.
         Character encoding bugs are disproportionately common in name fields.
         """
-        unicode_faker = Faker(["ja_JP", "zh_CN", "ar_AA", "ru_RU"])
+        unicode_faker = Faker(["ja_JP", "zh_CN", "ar_EG", "ru_RU"])
         unique_tag = uuid.uuid4().hex[:8].upper()
         checkin = date.today() + timedelta(days=7)
 
