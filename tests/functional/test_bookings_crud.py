@@ -37,7 +37,7 @@ from datetime import date, timedelta
 import pytest
 
 from src.client.booking_client import BookingClient
-from src.models.booking import BookingDates, BookingPayload, BookingResponse
+from src.models.booking import BookingDates, BookingPayload, BookingResponse, PartialBookingPayload
 from src.utils.data_factory import BookingDataFactory
 from src.utils.logger import get_logger
 
@@ -424,7 +424,7 @@ class TestPatchBooking:
         """
         booking_id, original_payload = created_booking
 
-        patch_data = {"totalprice": 9999, "depositpaid": False}
+        patch_data = PartialBookingPayload(totalprice=9999, depositpaid=False)
         patched = booking_client.partial_update_booking(booking_id, patch_data)
 
         # Patched fields must reflect new values
@@ -468,7 +468,7 @@ class TestPatchBooking:
         """
         booking_id, original_payload = created_booking
 
-        patch_data = {"additionalneeds": ""}
+        patch_data = PartialBookingPayload(additionalneeds="")
         patched = booking_client.partial_update_booking(booking_id, patch_data)
 
         # Core fields must be untouched

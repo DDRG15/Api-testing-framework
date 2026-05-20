@@ -117,12 +117,12 @@ class BookingClient:
         return self._parse(response.json(), BookingResponse, "update_booking")
 
     def partial_update_booking(
-        self, booking_id: int, partial_payload: dict
+        self, booking_id: int, partial_payload: PartialBookingPayload
     ) -> BookingResponse:
         """PATCH /booking/{id} — partial update. Returns updated booking."""
         response = self._client.patch(
             f"/booking/{booking_id}",
-            json=partial_payload,
+            json=partial_payload.model_dump(mode="json", exclude_none=True),
         )
         response.raise_for_status()
         return self._parse(response.json(), BookingResponse, "partial_update_booking")
