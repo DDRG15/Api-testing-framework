@@ -530,18 +530,33 @@ def _safe_delete_booking_direct(booking_id: int) -> None:
 
 
 # Cache the teardown token to avoid re-auth on every fixture teardown.
+# TTL guards against the token expiring mid-session: an expired token causes
+# every teardown DELETE to return 403, leaving every booking as an orphan.
+# time.monotonic() is used — it is immune to wall-clock adjustments (NTP, DST).
+_TEARDOWN_TOKEN_TTL_SECONDS: float = 3600.0
 _teardown_token_cache: Optional[str] = None
+_teardown_token_obtained_at: Optional[float] = None
 
 
 def _get_cached_teardown_token() -> str:
-    global _teardown_token_cache
-    if not _teardown_token_cache:
+    global _teardown_token_cache, _teardown_token_obtained_at
+    now = time.monotonic()
+    token_age = (now - _teardown_token_obtained_at) if _teardown_token_obtained_at is not None else float("inf")
+    if _teardown_token_cache is None or token_age > _TEARDOWN_TOKEN_TTL_SECONDS:
+        if _teardown_token_cache is not None:
+            logger.warning(
+                "teardown_token_expired",
+                age_seconds=round(token_age, 1),
+                ttl_seconds=_TEARDOWN_TOKEN_TTL_SECONDS,
+                note="Re-authenticating. Previous token exceeded TTL.",
+            )
         _auth_client = DirectApiClient()
         _booking = BookingClient(_auth_client)
         _teardown_token_cache = _booking.authenticate(
             username=settings.api_username,
             password=settings.api_password,
         )
+        _teardown_token_obtained_at = now
         _auth_client.close()
     return _teardown_token_cache
 

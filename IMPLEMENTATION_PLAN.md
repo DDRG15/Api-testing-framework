@@ -17,7 +17,7 @@
 ## A-Tier — High Priority (fix before first CI PR)
 
 - [ ] **A1** — Add `pytest-cov` with 80% branch coverage gate
-- [ ] **A2** — `conftest.py:533` — Add token TTL expiry check in `_get_cached_teardown_token`
+- [x] **A2** — `conftest.py:533` — Add token TTL expiry check in `_get_cached_teardown_token` *(2026-05-24)*
 - [x] **A3** — `src/client/booking_client.py:119` — Replace raw `dict` with `PartialBookingPayload` model on PATCH *(2026-05-19)*
 - [ ] **A4** — `.github/workflows/api-tests.yml` — Upload `leaked_resources.txt` as CI artifact
 - [ ] **A5** — `requirements.txt` — Remove unused `allure-pytest` (or wire up Allure server)
@@ -55,7 +55,7 @@
 | G3 | fix(data): correct ar_AA → ar_EG in data_factory | 2026-05-19 | ✅ done |
 | G4 | fix(types): lowercase any → Any in test_schema_contracts | 2026-05-19 | ✅ done |
 | G5 | fix(observability): log truncation warning; inject CID into exceptions | 2026-05-24 | ✅ done |
-| G6 | fix(teardown): add token TTL check | — | pending |
+| G6 | fix(teardown): add token TTL check | 2026-05-24 | ✅ done |
 | G7 | fix(canary): replace CanaryPayload with canonical BookingPayload | 2026-05-19 | ✅ done |
 | G8 | chore: add pyproject.toml (Ruff + MyPy + coverage config) | — | pending |
 | G9 | ci: add code-quality job (Ruff + MyPy) to GitHub Actions | — | pending |
