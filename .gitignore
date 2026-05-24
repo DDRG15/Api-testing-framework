@@ -29,3 +29,7 @@ htmlcov/
 .vscode/
 .idea/
 *.swp
+
+# Personal docs — audience-specific explainers and pitch, not for the repo
+EXPLAINER.md
+PITCH.md
