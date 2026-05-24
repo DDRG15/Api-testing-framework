@@ -42,7 +42,7 @@ import datetime
 import time
 import uuid
 from email.utils import parsedate_to_datetime
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from requests import Response, Session
@@ -312,8 +312,10 @@ class ApiClient:
         cid = correlation_id or str(uuid.uuid4())
         url = f"{self._base_url}{path}"
 
+        # requests.Session.headers is MutableMapping[str, str | bytes] in the stubs,
+        # but only ever holds str values at runtime. Cast is safe here.
         merged_headers: dict[str, str] = {
-            **dict(self._session.headers),
+            **cast(dict[str, str], self._session.headers),
             **(headers or {}),
             "X-Correlation-ID": cid,
         }
