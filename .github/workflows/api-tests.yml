@@ -120,7 +120,36 @@ jobs:
           retention-days: 90
 
   # ===========================================================================
-  # Job 2: Build the Docker image once; cache layers for subsequent runs
+  # Job 2: Static analysis — Ruff lint + MyPy type check
+  # Runs in parallel with build-image. Both need security-audit to pass.
+  # A type error or lint violation blocks the test run just like a CVE would.
+  # ===========================================================================
+  code-quality:
+    name: "Code Quality (Ruff + MyPy)"
+    runs-on: ubuntu-latest
+    needs: security-audit
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install analysis tools
+        run: pip install ruff==0.4.4 mypy==1.10.0 pydantic==2.8.2 pydantic-settings==2.4.0 structlog==24.4.0 tenacity==9.0.0 requests==2.33.0 redis==5.0.8
+
+      - name: Ruff — lint check
+        run: ruff check src/ config/
+
+      - name: MyPy — type check
+        run: mypy src/ config/
+
+  # ===========================================================================
+  # Job 3: Build the Docker image once; cache layers for subsequent runs
   # ===========================================================================
   build-image:
     name: "Build & Cache Docker Image"
@@ -192,7 +221,7 @@ jobs:
   api-tests:
     name: "API Tests (${{ github.event.inputs.environment || 'staging' }})"
     runs-on: ubuntu-latest
-    needs: build-image
+    needs: [build-image, code-quality]
 
     environment: ${{ github.event.inputs.environment || 'staging' }}
 

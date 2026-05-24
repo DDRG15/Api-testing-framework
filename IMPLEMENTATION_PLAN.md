@@ -58,8 +58,8 @@
 | G6 | fix(teardown): add token TTL check | 2026-05-24 | ✅ done |
 | G7 | fix(canary): replace CanaryPayload with canonical BookingPayload | 2026-05-19 | ✅ done |
 | G8 | chore: add pyproject.toml (Ruff + MyPy + coverage config) | 2026-05-24 | ✅ done |
-| G9 | ci: add code-quality job (Ruff + MyPy) to GitHub Actions | — | pending |
-| G10 | ci: add MyPy type-check job | — | pending |
+| G9 | ci: add code-quality job (Ruff + MyPy) to GitHub Actions | 2026-05-24 | ✅ done |
+| G10 | ci: add MyPy type-check job | 2026-05-24 | ✅ done |
 | G11 | chore: add .pre-commit-config.yaml + .secrets.baseline | — | pending |
 | G12 | ci: add pytest-cov; enforce 80% branch coverage gate | 2026-05-24 | ✅ done |
 | G13 | ci: add pytest-rerunfailures; mark flaky tests selectively | — | pending |
