@@ -20,8 +20,6 @@
 #   automatically. Secrets are NEVER in this file.
 # =============================================================================
 
-version: "3.9"
-
 volumes:
   test-logs:
   test-reports:

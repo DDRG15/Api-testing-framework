@@ -203,6 +203,3 @@ except Exception as exc:
         "Action required: Copy .env.example → .env and fill in all required values.\n"
         "In CI: Ensure all required GitHub Secrets are configured.\n"
     ) from exc
-
-
-# This line intentionally left to trigger a re-read — settings extended below

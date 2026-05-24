@@ -22,6 +22,7 @@ logger = get_logger(__name__)
 
 
 @pytest.mark.smoke
+@pytest.mark.flaky(reruns=1, reruns_delay=2)
 def test_production_canary_probe(booking_client):
     """
     CANARY PROBE: Single-threaded, static payload.

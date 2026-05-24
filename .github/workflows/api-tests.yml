@@ -354,6 +354,15 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
+      - name: Upload leaked resources registry
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: leaked-resources-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: leaked_resources.txt
+          retention-days: 30
+          if-no-files-found: ignore
+
       # Publishes results to GitHub's native Checks tab and PR status
       - name: Publish test results to GitHub Checks
         if: always()

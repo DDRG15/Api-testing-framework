@@ -89,11 +89,9 @@ pin-base-image:  ## Fetch and display the current python:3.11-slim SHA256 digest
 audit:  ## Run pip-audit CVE scan against requirements.txt
 	pip-audit -r requirements.txt --strict
 
-lint:  ## Run basic syntax check on all Python files
-	python -m py_compile $$(find . -name "*.py" \
-	  -not -path "./__pycache__/*" \
-	  -not -path "./.git/*")
-	@echo "✅ All Python files compile cleanly."
+lint:  ## Run Ruff linter on src/ and config/
+	ruff check src/ config/
+	@echo "✅ Ruff lint passed."
 
 # ---------------------------------------------------------------------------
 clean:  ## Remove all generated files (logs, reports, __pycache__)

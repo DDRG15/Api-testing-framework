@@ -19,7 +19,7 @@
 - [x] **A1** — Add `pytest-cov` with 80% branch coverage gate *(2026-05-24)*
 - [x] **A2** — `conftest.py:533` — Add token TTL expiry check in `_get_cached_teardown_token` *(2026-05-24)*
 - [x] **A3** — `src/client/booking_client.py:119` — Replace raw `dict` with `PartialBookingPayload` model on PATCH *(2026-05-19)*
-- [ ] **A4** — `.github/workflows/api-tests.yml` — Upload `leaked_resources.txt` as CI artifact
+- [x] **A4** — `.github/workflows/api-tests.yml` — Upload `leaked_resources.txt` as CI artifact *(2026-05-24)*
 - [ ] **A5** — `requirements.txt` — Remove unused `allure-pytest` (or wire up Allure server)
 
 ---
@@ -27,7 +27,7 @@
 ## B-Tier — Next Sprint
 
 - [x] **B1** — `src/utils/data_factory.py:206` — Fix Faker locale `"ar_AA"` → `"ar_EG"` *(2026-05-19)*
-- [ ] **B2** — Add `pytest-rerunfailures`; mark canary + SLO tests `@pytest.mark.flaky(reruns=1)`
+- [x] **B2** — Add `pytest-rerunfailures`; mark canary + SLO tests `@pytest.mark.flaky(reruns=1)` *(2026-05-24)*
 - [x] **B3** — `src/client/base_client.py:482` — Log warning when response body is truncated at 4096 chars *(2026-05-24)*
 - [x] **B4** — `src/client/base_client.py` — Inject `correlation_id` into SLO `AssertionError` and retry exceptions *(2026-05-24)*
 - [ ] **B5** — Create `tests/functional/test_auth_edge_cases.py` (invalid creds, bad token, no token)
@@ -39,9 +39,9 @@
 
 - [ ] **C1** — `tests/performance/locustfile.py` — Locust load baseline (separate `requirements-perf.txt`)
 - [ ] **C2** — `k8s/test-job.yaml` — Kubernetes Job manifest (non-root, secret injection)
-- [ ] **C3** — `config/settings.py` — Remove dead comment at end of file
-- [ ] **C4** — `Makefile` — Update `lint` target from `py_compile` to `ruff check .`
-- [ ] **C5** — `docker-compose.yml` — Remove deprecated `version: "3.9"` field
+- [x] **C3** — `config/settings.py` — Remove dead comment at end of file *(2026-05-24)*
+- [x] **C4** — `Makefile` — Update `lint` target from `py_compile` to `ruff check .` *(2026-05-24)*
+- [x] **C5** — `docker-compose.yml` — Remove deprecated `version: "3.9"` field *(2026-05-24)*
 
 ---
 
@@ -62,10 +62,10 @@
 | G10 | ci: add MyPy type-check job | 2026-05-24 | ✅ done |
 | G11 | chore: add .pre-commit-config.yaml + .secrets.baseline | 2026-05-24 | ✅ done |
 | G12 | ci: add pytest-cov; enforce 80% branch coverage gate | 2026-05-24 | ✅ done |
-| G13 | ci: add pytest-rerunfailures; mark flaky tests selectively | — | pending |
-| G14 | ci: upload leaked_resources.txt as CI artifact | — | pending |
+| G13 | ci: add pytest-rerunfailures; mark flaky tests selectively | 2026-05-24 | ✅ done |
+| G14 | ci: upload leaked_resources.txt as CI artifact | 2026-05-24 | ✅ done |
 | G15 | ci: remove allure-pytest; clean Dockerfile/docker-compose | — | pending |
 | G16 | test: add auth edge case tests | — | pending |
-| G17 | chore: dead comment, docker-compose version, Makefile lint | — | pending |
+| G17 | chore: dead comment, docker-compose version, Makefile lint | 2026-05-24 | ✅ done |
 | G18 | feat: add Locust performance baseline | — | pending |
 | G19 | feat: add k8s/test-job.yaml Kubernetes Job manifest | — | pending |

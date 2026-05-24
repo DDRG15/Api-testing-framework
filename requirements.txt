@@ -41,5 +41,8 @@ allure-pytest==2.13.5       # Allure-compatible report generation
 # --- Coverage ---
 pytest-cov==5.0.0           # Branch coverage gate (80% threshold enforced via pyproject.toml)
 
+# --- Flaky test detection ---
+pytest-rerunfailures==14.0  # Selective reruns for live-API tests prone to transient network errors
+
 # --- Security Auditing (CI gate) ---
 pip-audit==2.7.3            # CVE scanning against PyPI advisory database
