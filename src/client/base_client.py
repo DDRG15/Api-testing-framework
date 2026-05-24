@@ -394,6 +394,10 @@ class ApiClient:
                 max_attempts=settings.retry_max_attempts,
                 last_exception=str(exc),
             )
+            exc.args = (
+                f"All {settings.retry_max_attempts} retry attempts exhausted "
+                f"for {method.upper()} {url}. [correlation_id={cid}]",
+            )
             raise
         except CircuitBreakerOpenError:
             log.error("request_circuit_open", circuit_name=self._cb.name)
@@ -413,7 +417,7 @@ class ApiClient:
             raise AssertionError(
                 f"SLO BREACH: {method.upper()} {url} took {elapsed_ms}ms "
                 f"(threshold: {settings.slo_response_time_ms}ms). "
-                "Response time is a first-class failure."
+                f"Response time is a first-class failure. [correlation_id={cid}]"
             )
 
         log.info(
@@ -478,7 +482,7 @@ class ApiClient:
         if not response.ok:
             log.warning(
                 "request_non_ok_response",
-                response_body=self._safe_response_body(response),
+                response_body=self._safe_response_body(response, log),
                 **log_ctx,
             )
         else:
@@ -487,9 +491,22 @@ class ApiClient:
         return response
 
     @staticmethod
-    def _safe_response_body(response: Response) -> str:
+    def _safe_response_body(
+        response: Response,
+        log: Optional[structlog.stdlib.BoundLogger] = None,
+    ) -> str:
         try:
-            return response.text[:4096]
+            body = response.text
+            if len(body) > 4096:
+                if log is not None:
+                    log.warning(
+                        "response_body_truncated",
+                        full_length=len(body),
+                        truncated_to=4096,
+                        note="Log shows first 4096 chars only. Full body may contain additional diagnostic context.",
+                    )
+                return body[:4096]
+            return body
         except Exception:
             return "<unreadable response body>"
 

@@ -1,7 +1,7 @@
 # Enterprise API Testing Framework — Implementation Plan
 
 > Tracking file for the super overhaul. Check each item when done and add the date (YYYY-MM-DD) next to the checkbox.
-> Last updated: 2026-05-19
+> Last updated: 2026-05-24
 
 ---
 
@@ -28,8 +28,8 @@
 
 - [x] **B1** — `src/utils/data_factory.py:206` — Fix Faker locale `"ar_AA"` → `"ar_EG"` *(2026-05-19)*
 - [ ] **B2** — Add `pytest-rerunfailures`; mark canary + SLO tests `@pytest.mark.flaky(reruns=1)`
-- [ ] **B3** — `src/client/base_client.py:482` — Log warning when response body is truncated at 4096 chars
-- [ ] **B4** — `src/client/base_client.py` — Inject `correlation_id` into SLO `AssertionError` and retry exceptions
+- [x] **B3** — `src/client/base_client.py:482` — Log warning when response body is truncated at 4096 chars *(2026-05-24)*
+- [x] **B4** — `src/client/base_client.py` — Inject `correlation_id` into SLO `AssertionError` and retry exceptions *(2026-05-24)*
 - [ ] **B5** — Create `tests/functional/test_auth_edge_cases.py` (invalid creds, bad token, no token)
 - [x] **B6** — `tests/functional/test_canary.py` — Remove `CanaryPayload`/`CanaryDates`; use canonical `BookingPayload` *(2026-05-19)*
 
@@ -54,7 +54,7 @@
 | G2 | fix(models): complete PartialBookingPayload wiring in client and tests | 2026-05-19 | ✅ done |
 | G3 | fix(data): correct ar_AA → ar_EG in data_factory | 2026-05-19 | ✅ done |
 | G4 | fix(types): lowercase any → Any in test_schema_contracts | 2026-05-19 | ✅ done |
-| G5 | fix(observability): log truncation warning; inject CID into exceptions | — | pending |
+| G5 | fix(observability): log truncation warning; inject CID into exceptions | 2026-05-24 | ✅ done |
 | G6 | fix(teardown): add token TTL check | — | pending |
 | G7 | fix(canary): replace CanaryPayload with canonical BookingPayload | 2026-05-19 | ✅ done |
 | G8 | chore: add pyproject.toml (Ruff + MyPy + coverage config) | — | pending |
