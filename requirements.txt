@@ -6,6 +6,7 @@
 
 # --- Core HTTP & Testing ---
 requests==2.33.0
+types-requests==2.32.0.20241016  # MyPy stubs for requests
 pytest==9.0.3
 pytest-timeout==2.3.1       # Global watchdog: catches hangs outside HTTP calls
 pytest-randomly==3.15.0     # Randomise test order → expose order-dependency bugs

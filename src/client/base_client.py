@@ -89,7 +89,7 @@ TRANSIENT_EXCEPTIONS: tuple[type[Exception], ...] = (
 )
 
 
-def _is_transient_failure(exc: Exception) -> bool:
+def _is_transient_failure(exc: BaseException) -> bool:
     """
     Return True ONLY for infrastructure-level transients.
 

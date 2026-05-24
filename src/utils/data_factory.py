@@ -32,6 +32,7 @@ from __future__ import annotations
 import random
 import uuid
 from datetime import date, timedelta
+from typing import Any
 
 from faker import Faker
 
@@ -229,7 +230,7 @@ class BookingDataFactory:
         )
         return payload
 
-    def bulk(self, count: int, **kwargs) -> list[BookingPayload]:
+    def bulk(self, count: int, **kwargs: Any) -> list[BookingPayload]:
         """
         Generate `count` unique realistic payloads.
         Each gets its own UUID suffix — safe for parallel creation.

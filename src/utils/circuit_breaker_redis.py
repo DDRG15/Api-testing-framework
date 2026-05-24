@@ -46,6 +46,7 @@ from __future__ import annotations
 import threading
 import time
 from enum import Enum, auto
+from typing import Any
 
 from src.utils.logger import get_logger
 
@@ -154,7 +155,7 @@ class RedisCircuitBreaker:
         self._key = f"circuit:{name}"
         self._lock = threading.Lock()
         self._redis_available = False
-        self._client = None
+        self._client: Any = None
 
         try:
             import redis as redis_lib
@@ -218,18 +219,17 @@ class RedisCircuitBreaker:
     def __exit__(
         self,
         exc_type: type | None,
-        exc_val: Exception | None,
+        exc_val: BaseException | None,
         exc_tb: object,
-    ) -> bool:
+    ) -> None:
         if not self._redis_available:
-            return False
+            return
 
         with self._lock:
             if exc_type is None:
                 self._on_success()
             else:
                 self._on_failure()
-        return False
 
     # ------------------------------------------------------------------
     # State transitions
@@ -354,13 +354,17 @@ class _InMemoryCircuitBreaker:
                     raise CircuitBreakerOpenError(self.name, self._open_since)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+    def __exit__(
+        self,
+        exc_type: type | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
         with self._lock:
             if exc_type is None:
                 self._on_success()
             else:
                 self._on_failure()
-        return False
 
     def _on_success(self) -> None:
         if self._state == CircuitState.HALF_OPEN:

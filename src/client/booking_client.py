@@ -13,7 +13,9 @@ a `CreateBookingResponse` or a clear exception.
 """
 from __future__ import annotations
 
-from pydantic import ValidationError
+from typing import TypeVar
+
+from pydantic import BaseModel, ValidationError
 
 from src.client.base_client import ApiClient
 from src.models.booking import (
@@ -27,6 +29,8 @@ from src.models.booking import (
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+_M = TypeVar("_M", bound=BaseModel)
 
 
 class BookingClient:
@@ -155,7 +159,7 @@ class BookingClient:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _parse(data: dict, model: type, operation: str):
+    def _parse(data: dict, model: type[_M], operation: str) -> _M:
         """Deserialize a dict into a Pydantic model. Log schema violations."""
         try:
             return model.model_validate(data)
