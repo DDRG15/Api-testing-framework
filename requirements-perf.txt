@@ -1,0 +1,12 @@
+# =============================================================================
+# requirements-perf.txt — Performance testing dependencies
+#
+# Kept separate from requirements.txt intentionally.
+# Locust adds ~15 packages and is NEVER needed in the functional test image.
+# Installing it in CI adds startup overhead and expands the CVE audit surface.
+#
+# Install with:
+#   pip install -r requirements.txt -r requirements-perf.txt
+# =============================================================================
+
+locust==2.31.2

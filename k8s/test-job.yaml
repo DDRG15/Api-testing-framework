@@ -1,0 +1,126 @@
+# =============================================================================
+# k8s/test-job.yaml — Kubernetes Job manifest for the API test suite
+#
+# Design constraints:
+#   - Non-root execution (uid 1001 = testrunner, matches Dockerfile USER)
+#   - All credentials injected from a Kubernetes Secret, never hardcoded
+#   - Resource limits prevent noisy-neighbour impact in shared clusters
+#   - automountServiceAccountToken: false — this job needs no k8s API access
+#   - restartPolicy: Never — a failed run must not silently retry and hide
+#     a flapping test. Investigate the failure, don't auto-bury it.
+#
+# Prerequisites:
+#   kubectl create secret generic api-test-secrets \
+#     --from-literal=API_BASE_URL=https://your-api.internal \
+#     --from-literal=API_USERNAME=your-username \
+#     --from-literal=API_PASSWORD=your-password
+#
+# Run:
+#   kubectl apply -f k8s/test-job.yaml
+#   kubectl logs -f job/api-test-suite
+# =============================================================================
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: api-test-suite
+  labels:
+    app: api-test-suite
+    component: testing
+spec:
+  # A failed job stays visible for 1 hour for log retrieval, then is cleaned up.
+  ttlSecondsAfterFinished: 3600
+  # Never auto-retry — a test failure is a signal, not a transient condition.
+  backoffLimit: 0
+
+  template:
+    metadata:
+      labels:
+        app: api-test-suite
+        component: testing
+    spec:
+      restartPolicy: Never
+      # This job needs no access to the Kubernetes API.
+      automountServiceAccountToken: false
+
+      securityContext:
+        # Run as non-root user matching the Dockerfile's testrunner (uid 1001)
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        # Prevent privilege escalation inside the container
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: api-test-runner
+          # Pin to the exact image digest built by CI for reproducibility.
+          # Replace <SHA> with the digest from the build-image CI job output.
+          image: ghcr.io/ddrg15/enterprise-api-testing-framework/api-test-runner:<SHA>
+          imagePullPolicy: Always
+
+          command: ["python", "-m", "pytest", "--tb=short", "--verbose", "--timeout=60"]
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # pytest writes reports/ and logs/
+            capabilities:
+              drop: ["ALL"]
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "256Mi"
+            limits:
+              cpu: "2000m"
+              memory: "512Mi"
+
+          env:
+            # Non-secret runtime config — safe to commit
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: LOG_FILE
+              value: "logs/test_run.jsonl"
+            - name: REQUEST_CONNECT_TIMEOUT
+              value: "5"
+            - name: REQUEST_READ_TIMEOUT
+              value: "20"
+            - name: RETRY_MAX_ATTEMPTS
+              value: "3"
+            - name: RETRY_BASE_DELAY_SECONDS
+              value: "1.0"
+            - name: RETRY_MAX_DELAY_SECONDS
+              value: "30.0"
+            - name: SLO_RESPONSE_TIME_MS
+              value: "3000"
+            - name: CIRCUIT_BREAKER_FAILURE_THRESHOLD
+              value: "5"
+            - name: CIRCUIT_BREAKER_RECOVERY_TIMEOUT_SECONDS
+              value: "60"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+
+            # Secrets injected from Kubernetes Secret — never hardcoded here.
+            # Create with: kubectl create secret generic api-test-secrets ...
+            - name: API_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: api-test-secrets
+                  key: API_BASE_URL
+            - name: API_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: api-test-secrets
+                  key: API_USERNAME
+            - name: API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: api-test-secrets
+                  key: API_PASSWORD
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: api-test-secrets
+                  key: API_TOKEN
+                  optional: true

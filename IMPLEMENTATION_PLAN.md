@@ -30,15 +30,15 @@
 - [x] **B2** — Add `pytest-rerunfailures`; mark canary + SLO tests `@pytest.mark.flaky(reruns=1)` *(2026-05-24)*
 - [x] **B3** — `src/client/base_client.py:482` — Log warning when response body is truncated at 4096 chars *(2026-05-24)*
 - [x] **B4** — `src/client/base_client.py` — Inject `correlation_id` into SLO `AssertionError` and retry exceptions *(2026-05-24)*
-- [ ] **B5** — Create `tests/functional/test_auth_edge_cases.py` (invalid creds, bad token, no token)
+- [x] **B5** — Create `tests/functional/test_auth_edge_cases.py` (invalid creds, bad token, no token) *(2026-05-24)*
 - [x] **B6** — `tests/functional/test_canary.py` — Remove `CanaryPayload`/`CanaryDates`; use canonical `BookingPayload` *(2026-05-19)*
 
 ---
 
 ## C-Tier — Backlog (do when needed)
 
-- [ ] **C1** — `tests/performance/locustfile.py` — Locust load baseline (separate `requirements-perf.txt`)
-- [ ] **C2** — `k8s/test-job.yaml` — Kubernetes Job manifest (non-root, secret injection)
+- [x] **C1** — `tests/performance/locustfile.py` — Locust load baseline (separate `requirements-perf.txt`) *(2026-05-24)*
+- [x] **C2** — `k8s/test-job.yaml` — Kubernetes Job manifest (non-root, secret injection) *(2026-05-24)*
 - [x] **C3** — `config/settings.py` — Remove dead comment at end of file *(2026-05-24)*
 - [x] **C4** — `Makefile` — Update `lint` target from `py_compile` to `ruff check .` *(2026-05-24)*
 - [x] **C5** — `docker-compose.yml` — Remove deprecated `version: "3.9"` field *(2026-05-24)*
@@ -65,7 +65,7 @@
 | G13 | ci: add pytest-rerunfailures; mark flaky tests selectively | 2026-05-24 | ✅ done |
 | G14 | ci: upload leaked_resources.txt as CI artifact | 2026-05-24 | ✅ done |
 | G15 | ci: remove allure-pytest; clean Dockerfile/docker-compose | — | pending |
-| G16 | test: add auth edge case tests | — | pending |
+| G16 | test: add auth edge case tests | 2026-05-24 | ✅ done |
 | G17 | chore: dead comment, docker-compose version, Makefile lint | 2026-05-24 | ✅ done |
-| G18 | feat: add Locust performance baseline | — | pending |
-| G19 | feat: add k8s/test-job.yaml Kubernetes Job manifest | — | pending |
+| G18 | feat: add Locust performance baseline | 2026-05-24 | ✅ done |
+| G19 | feat: add k8s/test-job.yaml Kubernetes Job manifest | 2026-05-24 | ✅ done |
