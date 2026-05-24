@@ -200,15 +200,54 @@ process. A CI pipeline that blocks on known CVEs is the automation of that proce
 
 ---
 
+### 11. Correlation ID Injection into Exception Messages (`src/client/base_client.py`)
+
+The structured log already carries `correlation_id` on every line. That is sufficient when you have the log. It is not sufficient when you only have the pytest traceback — which is what you see first when a test fails in CI.
+
+When an SLO threshold is breached, the `AssertionError` message now ends with `[correlation_id=<cid>]`. When all retries are exhausted, `RetryError.args` is rewritten with the same pattern before re-raise. The result: the CID appears in the pytest failure output, the GitHub Actions annotation, and any Slack notification derived from the JUnit XML — without requiring anyone to cross-reference a JSONL file to find out which request caused the failure.
+
+**Financial relevance:** A test failure that does not contain enough information to start an investigation is a failure that will consume 20 minutes of an on-call engineer's time at 02:00. The CID is the single token that connects the test failure, the log line, and the upstream request trace. It belongs in the exception.
+
+---
+
+### 12. Teardown Token TTL Guard (`conftest.py`)
+
+The teardown token is cached across the test session to avoid re-authentication on every fixture teardown. The original implementation never expired that cache. A test session running longer than the token's validity window would hit 403 on every teardown DELETE, silently leave every booking as an orphan, and produce no log output explaining why cleanup failed.
+
+The fix adds a 1-hour TTL checked against `time.monotonic()`. When the token age exceeds the threshold, the client re-authenticates before the next teardown and emits a `teardown_token_expired` warning with the measured age. `time.monotonic()` is not wall-clock time — it is immune to NTP corrections and DST transitions that would cause a wall-clock comparison to fire a false expiry.
+
+**Financial relevance:** In a shared staging environment used by multiple teams, orphaned test records corrupt position aggregations, risk calculations, and regulatory reports. A cleanup mechanism that silently stops working after one hour is not a cleanup mechanism.
+
+---
+
+### 13. Static Analysis Pipeline (Ruff + MyPy + pre-commit + detect-secrets)
+
+Four tools. One gate. Each closes a different class of defect:
+
+- **Ruff** (E/W/F/I/B/UP rules) catches style violations, unused imports, bugbear anti-patterns, and import ordering in a single pass — faster than Flake8 by two orders of magnitude. Runs in CI on every push and locally on every `git commit`.
+- **MyPy** (`disallow_untyped_defs`, `warn_return_any`, scoped to `src/` and `config/`) catches the class of error that Ruff cannot: a function returning `Any` where the caller expects a `BookingResponse`, or an untyped argument that silently accepts the wrong type.
+- **pytest-cov** with 80% branch coverage enforces that every resilience path — circuit open, retry exhausted, SLO breach, token expired — has a test that exercises it. Line coverage misses these paths entirely because the line exists; branch coverage catches that the error branch was never entered.
+- **detect-secrets** blocks credentials at the commit boundary. The baseline is empty — there are no known-safe secrets in this repository, because there are no secrets in this repository.
+
+**Financial relevance:** A type error that ships to production in a position valuation function is not a type error — it is a P&L misstatement. Static analysis is not optional in a codebase where a `None` propagating through an arithmetic expression has financial consequences.
+
+---
+
+### 14. Auth Boundary Tests (`tests/functional/test_auth_edge_cases.py`)
+
+The happy path is tested extensively. The auth failure paths — wrong password, empty credentials, missing fields, DELETE with an invalid token, DELETE with no token — were untested.
+
+This matters because Restful-Booker returns `HTTP 200` with `{"reason": "Bad credentials"}` on a failed login, not a `401`. A framework that only checks status codes would treat this as a successful authentication. The auth edge case tests assert on the response body structure, verify that no `token` key is present on failure, and confirm that protected endpoints return `403` when the token is fabricated or absent.
+
+**Financial relevance:** In a brokerage API, an auth boundary test that misses the "200 with error body" pattern would allow a credential-validation bug to ship undetected. The test suite's job is to find the API's actual enforcement behaviour — not the behaviour implied by the HTTP spec.
+
+---
+
 ## What This Framework Is Not
 
-It is not a performance framework (no load generation, no percentile tracking).
 It is not a UI testing framework. It is not a chaos engineering framework.
 
-It is precisely what it claims to be: a production-grade API contract and
-functional correctness testing framework, built to the operational standards
-of a system where data integrity is non-negotiable and observability is
-not optional.
+It is a production-grade API contract, functional correctness, and observability testing framework — with a Locust performance baseline and a Kubernetes Job manifest for teams that need the next step. Built to the operational standards of a system where data integrity is non-negotiable and observability is not optional.
 
 ---
 
