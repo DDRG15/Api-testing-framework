@@ -1,0 +1,48 @@
+# =============================================================================
+# .pre-commit-config.yaml
+#
+# Runs automatically on every `git commit`. Install once with:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Run manually against all files with:
+#   pre-commit run --all-files
+# =============================================================================
+
+repos:
+  # ---------------------------------------------------------------------------
+  # Ruff — linting + import sorting (replaces flake8 + isort in one pass)
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^(src|config)/
+
+  # ---------------------------------------------------------------------------
+  # MyPy — static type checking
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        files: ^(src|config)/
+        additional_dependencies:
+          - pydantic==2.8.2
+          - pydantic-settings==2.4.0
+          - structlog==24.4.0
+          - tenacity==9.0.0
+          - requests==2.33.0
+          - redis==5.0.8
+          - types-requests
+
+  # ---------------------------------------------------------------------------
+  # detect-secrets — prevents credentials from entering the repo
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: \.env\.example$

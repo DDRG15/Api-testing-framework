@@ -10,7 +10,7 @@
 - [x] **S1** — `config/settings.py` — Add HTTPS-only validator on `api_base_url` *(2026-05-19)*
 - [x] **S2** — `src/client/base_client.py:270` — Add HTTPS guard in `set_auth_token()` *(2026-05-19)*
 - [x] **S3** — Add Ruff + MyPy static analysis (via `pyproject.toml` + CI job) *(2026-05-24)*
-- [ ] **S4** — Add pre-commit hooks (`.pre-commit-config.yaml`)
+- [x] **S4** — Add pre-commit hooks (`.pre-commit-config.yaml`) *(2026-05-24)*
 
 ---
 
@@ -60,7 +60,7 @@
 | G8 | chore: add pyproject.toml (Ruff + MyPy + coverage config) | 2026-05-24 | ✅ done |
 | G9 | ci: add code-quality job (Ruff + MyPy) to GitHub Actions | 2026-05-24 | ✅ done |
 | G10 | ci: add MyPy type-check job | 2026-05-24 | ✅ done |
-| G11 | chore: add .pre-commit-config.yaml + .secrets.baseline | — | pending |
+| G11 | chore: add .pre-commit-config.yaml + .secrets.baseline | 2026-05-24 | ✅ done |
 | G12 | ci: add pytest-cov; enforce 80% branch coverage gate | 2026-05-24 | ✅ done |
 | G13 | ci: add pytest-rerunfailures; mark flaky tests selectively | — | pending |
 | G14 | ci: upload leaked_resources.txt as CI artifact | — | pending |
