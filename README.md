@@ -182,16 +182,36 @@ locust -f tests/performance/locustfile.py \
 
 ## CI/CD — GitHub Actions
 
-### Required Secrets
-Configure these in: `Settings → Secrets and variables → Actions`
+### Why the API Tests Job Shows a Failure in This Repository
 
-| Secret | Description |
-|---|---|
-| `API_BASE_URL` | Full base URL of the API (e.g. `https://api.definitely-not-prod-shot-my-foot-trading.internal`) |
-| `API_USERNAME` | Auth username |
-| `API_PASSWORD` | Auth password |
-| `API_TOKEN` | Optional pre-issued token |
-| `SSL_CA_BUNDLE` | Optional path to custom CA bundle |
+The `API Tests` job in the public CI run will show a failure. This is intentional and expected.
+
+This repository is a portfolio demonstration of the framework's architecture and CI/CD gate design. It is not connected to a live API. The three secrets required to execute the test suite — `API_BASE_URL`, `API_USERNAME`, and `API_PASSWORD` — are deliberately not configured on this public repository.
+
+Every gate that can be validated without live credentials passes:
+
+| Job | Status | Why |
+|---|---|---|
+| Security Audit (CVE Scan) | Passes | No credentials needed — scans `requirements.txt` |
+| Code Quality (Ruff + MyPy) | Passes | No credentials needed — static analysis only |
+| Build & Cache Docker Image | Passes | No credentials needed — builds from source |
+| API Tests | Fails at credential validation | `API_BASE_URL`, `API_USERNAME`, `API_PASSWORD` not set |
+
+The pipeline fails loudly at the credential validation step with a clear error message — `Missing GitHub Secrets: ['API_BASE_URL', 'API_USERNAME', 'API_PASSWORD']` — which is the correct behavior. A pipeline that silently skips tests and reports green when credentials are absent would be a significantly worse design.
+
+**To run the full suite against a real endpoint:** fork the repository, add the three secrets in `Settings → Secrets and variables → Actions`, and re-run the pipeline. The Restful-Booker public API at `https://restful-booker.herokuapp.com` requires no registration and accepts `admin` / `password123` as credentials.
+
+---
+
+### Required Secrets
+
+| Secret | Required | Description |
+|---|---|---|
+| `API_BASE_URL` | Yes | Full base URL of the target API |
+| `API_USERNAME` | Yes | Auth username |
+| `API_PASSWORD` | Yes | Auth password |
+| `API_TOKEN` | No | Optional pre-issued token — skips the `/auth` round-trip if set |
+| `SSL_CA_BUNDLE` | No | Path to a custom CA bundle for private CAs |
 
 ### Pipeline Stages
 1. **Security Audit** — `pip-audit` scans all dependencies for CVEs. Nothing proceeds if a vulnerability is found.
