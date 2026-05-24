@@ -13,11 +13,7 @@ failures do not trip the shared circuit breaker used by other tests.
 """
 from __future__ import annotations
 
-import pytest
-import requests
-
 from src.client.base_client import ApiClient
-from src.client.booking_client import BookingClient
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -47,7 +43,6 @@ class TestInvalidCredentials:
         a successful auth.
         """
         client = _raw_client()
-        booking = BookingClient(client)
 
         response = client.post("/auth", json={"username": "admin", "password": "WRONG"})
         assert response.status_code == 200

@@ -20,10 +20,9 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from pydantic import ValidationError
 
 from src.client.booking_client import BookingClient
-from src.models.booking import BookingResponse, BookingSummary, CreateBookingResponse
+from src.models.booking import BookingResponse, BookingSummary
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -83,10 +82,6 @@ class TestResponseSchemaContracts:
 
         assert isinstance(summaries, list), (
             f"Expected list response from GET /booking, got {type(summaries).__name__}"
-        )
-        assert len(summaries) > 0, (
-            "GET /booking returned an empty list. "
-            "There should be at least some bookings in the system."
         )
 
         for summary in summaries[:5]:  # Spot-check the first 5

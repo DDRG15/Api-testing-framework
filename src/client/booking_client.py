@@ -13,7 +13,6 @@ a `CreateBookingResponse` or a clear exception.
 """
 from __future__ import annotations
 
-import structlog
 from pydantic import ValidationError
 
 from src.client.base_client import ApiClient
@@ -140,10 +139,16 @@ class BookingClient:
     def booking_exists(self, booking_id: int) -> bool:
         """
         Non-raising existence check. Returns False on 404, True on 200.
-        Used in teardown to confirm deletion without raising.
+        Raises for any other unexpected status code.
+        Used in teardown to confirm deletion without raising on the expected 404 case.
         """
         response = self._client.get(f"/booking/{booking_id}")
-        return response.status_code == 200
+        if response.status_code == 200:
+            return True
+        if response.status_code == 404:
+            return False
+        response.raise_for_status()
+        return False
 
     # ------------------------------------------------------------------
     # Internal helpers

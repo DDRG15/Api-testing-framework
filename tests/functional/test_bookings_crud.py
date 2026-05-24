@@ -31,13 +31,10 @@ Coverage matrix:
 """
 from __future__ import annotations
 
-import uuid
-from datetime import date, timedelta
-
 import pytest
 
 from src.client.booking_client import BookingClient
-from src.models.booking import BookingDates, BookingPayload, BookingResponse, PartialBookingPayload
+from src.models.booking import BookingPayload, BookingResponse, PartialBookingPayload
 from src.utils.data_factory import BookingDataFactory
 from src.utils.logger import get_logger
 
@@ -442,7 +439,7 @@ class TestPatchBooking:
             "PATCH must not modify unspecified fields."
         )
         assert patched.lastname == original_payload.lastname, (
-            f"PATCH corrupted lastname."
+            "PATCH corrupted lastname."
         )
         assert patched.bookingdates.checkin == original_payload.bookingdates.checkin, (
             "PATCH modified checkin date — should not have touched date fields."

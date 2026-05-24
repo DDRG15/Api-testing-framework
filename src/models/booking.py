@@ -13,7 +13,6 @@ This is "shift-left contract testing" without a separate Pact broker.
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -23,7 +22,7 @@ class BookingDates(BaseModel):
     checkout: date
 
     @model_validator(mode="after")
-    def checkout_must_be_after_checkin(self) -> "BookingDates":
+    def checkout_must_be_after_checkin(self) -> BookingDates:
         if self.checkout <= self.checkin:
             raise ValueError(
                 f"checkout ({self.checkout}) must be strictly after "
@@ -40,7 +39,7 @@ class BookingPayload(BaseModel):
     totalprice: int = Field(..., ge=0, le=1_000_000)
     depositpaid: bool
     bookingdates: BookingDates
-    additionalneeds: Optional[str] = Field(default=None, max_length=500)
+    additionalneeds: str | None = Field(default=None, max_length=500)
 
     @field_validator("firstname", "lastname")
     @classmethod
@@ -62,7 +61,7 @@ class BookingResponse(BaseModel):
     totalprice: int
     depositpaid: bool
     bookingdates: BookingDates
-    additionalneeds: Optional[str] = None
+    additionalneeds: str | None = None
 
 
 class CreateBookingResponse(BaseModel):
@@ -72,7 +71,7 @@ class CreateBookingResponse(BaseModel):
     booking: BookingResponse
 
     @model_validator(mode="after")
-    def booking_id_must_be_present(self) -> "CreateBookingResponse":
+    def booking_id_must_be_present(self) -> CreateBookingResponse:
         # Redundant with gt=0 but explicit for audit trail purposes.
         if not self.bookingid:
             raise ValueError("API returned a booking without an ID — data integrity violation.")
@@ -102,9 +101,9 @@ class PartialBookingPayload(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    firstname: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    lastname: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    totalprice: Optional[int] = Field(default=None, ge=0, le=1_000_000)
-    depositpaid: Optional[bool] = None
-    bookingdates: Optional[BookingDates] = None
-    additionalneeds: Optional[str] = Field(default=None, max_length=500)
+    firstname: str | None = Field(default=None, min_length=1, max_length=100)
+    lastname: str | None = Field(default=None, min_length=1, max_length=100)
+    totalprice: int | None = Field(default=None, ge=0, le=1_000_000)
+    depositpaid: bool | None = None
+    bookingdates: BookingDates | None = None
+    additionalneeds: str | None = Field(default=None, max_length=500)

@@ -47,23 +47,18 @@ Teardown guarantee:
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 import time
-import uuid
-from datetime import date, timedelta
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator, Optional
-
-from filelock import FileLock, Timeout
 
 import pytest
-import structlog
+from filelock import FileLock, Timeout
 
 from config.settings import settings
 from src.client.base_client import ApiClient
 from src.client.booking_client import BookingClient
-from src.models.booking import BookingDates, BookingPayload
+from src.models.booking import BookingPayload
 from src.utils.circuit_breaker import make_circuit_breaker
 from src.utils.logger import RUN_ID, configure_logging, get_logger
 
@@ -102,13 +97,13 @@ def _is_xdist_worker(config: pytest.Config) -> bool:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def configure_framework_logging() -> None:
+def configure_framework_logging(pytestconfig: pytest.Config) -> None:
     """
     Initialize structured JSON logging before any test runs.
     autouse=True ensures this cannot be forgotten.
     Each worker writes to its own log file to avoid interleaved writes.
     """
-    worker_id = _get_worker_id(pytest.Config.fromdictargs({}, []))  # type: ignore[arg-type]
+    worker_id = _get_worker_id(pytestconfig)
     log_file = settings.log_file
     if worker_id not in ("master", "controller"):
         # Each worker gets its own log shard to avoid file-write contention.
@@ -249,12 +244,16 @@ def _read_health_check_result() -> None:
     try:
         result = json.loads(_HEALTH_CHECK_RESULT.read_text(encoding="utf-8"))
     except Exception as exc:
-        logger.warning(
+        logger.critical(
             "health_check_result_unreadable",
             exception=str(exc),
-            note="Could not read result file. Assuming pass and continuing.",
+            note="Leader worker likely crashed mid-write. Aborting to avoid running against a downed service.",
         )
-        return
+        pytest.exit(
+            f"ABORTING: Could not read health-check result file ({exc}). "
+            "Leader worker may have crashed. Manual investigation required.",
+            returncode=2,
+        )
 
     if result.get("status") == "fail":
         pytest.exit(
@@ -271,6 +270,14 @@ def auth_token(health_check: None, shared_circuit_breaker) -> str:
     With xdist each worker gets its own token — this is correct:
     tokens should not be shared between processes to avoid invalidation races.
     """
+    if settings.api_token:
+        logger.info(
+            "session_auth_token_from_env",
+            run_id=RUN_ID,
+            note="Using API_TOKEN directly without calling /auth.",
+        )
+        return settings.api_token
+
     auth_client = ApiClient(circuit_breaker=shared_circuit_breaker)
     booking_client = BookingClient(auth_client)
     token = booking_client.authenticate(
@@ -364,7 +371,7 @@ def _write_leak_file(leaked_ids: list[int]) -> None:
     lines = [
         f"# Leaked resources from run_id={RUN_ID}",
         f"# Timestamp: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}",
-        f"# These booking IDs could not be deleted during teardown.",
+        "# These booking IDs could not be deleted during teardown.",
         f"# Manual deletion required against: {settings.api_base_url}",
         "",
     ] + [str(bid) for bid in leaked_ids]
@@ -534,8 +541,8 @@ def _safe_delete_booking_direct(booking_id: int) -> None:
 # every teardown DELETE to return 403, leaving every booking as an orphan.
 # time.monotonic() is used — it is immune to wall-clock adjustments (NTP, DST).
 _TEARDOWN_TOKEN_TTL_SECONDS: float = 3600.0
-_teardown_token_cache: Optional[str] = None
-_teardown_token_obtained_at: Optional[float] = None
+_teardown_token_cache: str | None = None
+_teardown_token_obtained_at: float | None = None
 
 
 def _get_cached_teardown_token() -> str:

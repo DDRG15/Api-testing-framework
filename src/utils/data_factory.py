@@ -10,7 +10,7 @@ Design principles for Tier-1 test data:
                    across parallel workers, repeated runs, and CI environments.
 
   REALISM        — Data looks like real production data, not "foo/bar/test123".
-                   Real-looking names and notes surface encoding bugs, 
+                   Real-looking names and notes surface encoding bugs,
                    truncation issues, and character-set problems that
                    "TESTUSER" payloads never expose.
 
@@ -32,7 +32,6 @@ from __future__ import annotations
 import random
 import uuid
 from datetime import date, timedelta
-from typing import Optional
 
 from faker import Faker
 
@@ -59,7 +58,7 @@ class BookingDataFactory:
         minimal = factory.minimum_price()   # Boundary: price = 0
     """
 
-    def __init__(self, seed: Optional[int] = None) -> None:
+    def __init__(self, seed: int | None = None) -> None:
         """
         Args:
             seed: Optional integer seed for deterministic generation.
@@ -70,7 +69,6 @@ class BookingDataFactory:
 
         self._seed = seed
         self._faker = Faker(["en_US", "en_GB"])
-        Faker.seed(seed)
         self._faker.seed_instance(seed)
 
         logger.debug(

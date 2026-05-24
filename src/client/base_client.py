@@ -42,15 +42,16 @@ import datetime
 import time
 import uuid
 from email.utils import parsedate_to_datetime
-from typing import Any, Optional
+from typing import Any
 
-import requests
 import structlog
 from requests import Response, Session
 from requests.exceptions import (
     ConnectionError as RequestsConnectionError,
-    ReadTimeout,
+)
+from requests.exceptions import (
     ConnectTimeout,
+    ReadTimeout,
     Timeout,
 )
 from tenacity import (
@@ -59,7 +60,6 @@ from tenacity import (
     retry_if_exception,
     stop_after_attempt,
     wait_exponential,
-    before_sleep_log,
 )
 from tenacity.wait import wait_base
 
@@ -116,7 +116,7 @@ class _TransientHttpError(Exception):
         self,
         status_code: int,
         url: str,
-        retry_after_seconds: Optional[float] = None,
+        retry_after_seconds: float | None = None,
     ) -> None:
         super().__init__(f"Transient HTTP {status_code} from {url}")
         self.status_code = status_code
@@ -128,7 +128,7 @@ class _TransientHttpError(Exception):
 # ---------------------------------------------------------------------------
 
 
-def _parse_retry_after(header_value: str) -> Optional[float]:
+def _parse_retry_after(header_value: str) -> float | None:
     """
     Parse the Retry-After header into float seconds to wait.
 
@@ -155,7 +155,7 @@ def _parse_retry_after(header_value: str) -> Optional[float]:
     # --- Attempt 2: HTTP-date ---
     try:
         retry_at = parsedate_to_datetime(value)
-        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        now = datetime.datetime.now(tz=datetime.UTC)
         delta = (retry_at - now).total_seconds()
         return max(0.0, delta)  # Guard against clock skew returning negative
     except Exception:
@@ -247,8 +247,8 @@ class ApiClient:
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
-        circuit_breaker: Optional[CircuitBreaker] = None,
+        base_url: str | None = None,
+        circuit_breaker: CircuitBreaker | None = None,
     ) -> None:
         self._base_url = (base_url or settings.api_base_url).rstrip("/")
         self._session = Session()
@@ -292,10 +292,10 @@ class ApiClient:
         method: str,
         path: str,
         *,
-        params: Optional[dict[str, Any]] = None,
-        json: Optional[dict[str, Any]] = None,
-        headers: Optional[dict[str, str]] = None,
-        correlation_id: Optional[str] = None,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        correlation_id: str | None = None,
     ) -> Response:
         """
         Execute an HTTP request with the full resilience stack applied.
@@ -367,7 +367,7 @@ class ApiClient:
                     # For 429: parse Retry-After and carry it in the sentinel.
                     # For other transients: raise with no delay override.
                     if response.status_code in TRANSIENT_STATUS_CODES:
-                        retry_after: Optional[float] = None
+                        retry_after: float | None = None
 
                         if response.status_code == 429:
                             raw_header = response.headers.get("Retry-After", "")
@@ -431,8 +431,8 @@ class ApiClient:
         self,
         method: str,
         url: str,
-        params: Optional[dict[str, Any]],
-        json: Optional[dict[str, Any]],
+        params: dict[str, Any] | None,
+        json: dict[str, Any] | None,
         headers: dict[str, str],
         log: structlog.stdlib.BoundLogger,
     ) -> Response:
@@ -493,7 +493,7 @@ class ApiClient:
     @staticmethod
     def _safe_response_body(
         response: Response,
-        log: Optional[structlog.stdlib.BoundLogger] = None,
+        log: structlog.stdlib.BoundLogger | None = None,
     ) -> str:
         try:
             body = response.text

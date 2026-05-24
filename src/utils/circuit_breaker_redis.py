@@ -43,10 +43,9 @@ KEY SCHEMA (Redis Hash):
 """
 from __future__ import annotations
 
-import time
 import threading
+import time
 from enum import Enum, auto
-from typing import Optional
 
 from src.utils.logger import get_logger
 
@@ -194,7 +193,7 @@ class RedisCircuitBreaker:
     # Context manager interface
     # ------------------------------------------------------------------
 
-    def __enter__(self) -> "RedisCircuitBreaker":
+    def __enter__(self) -> RedisCircuitBreaker:
         if not self._redis_available:
             return self  # Fail open: Redis down → allow all requests
 
@@ -295,8 +294,8 @@ def make_circuit_breaker(
     name: str,
     failure_threshold: int,
     recovery_timeout: float,
-    redis_url: Optional[str] = None,
-) -> "RedisCircuitBreaker | _InMemoryCircuitBreaker":
+    redis_url: str | None = None,
+) -> RedisCircuitBreaker | _InMemoryCircuitBreaker:
     """
     Returns a Redis-backed circuit breaker if a Redis URL is configured,
     otherwise returns a thread-safe in-memory implementation.
@@ -344,7 +343,7 @@ class _InMemoryCircuitBreaker:
         self._open_since: float = 0.0
         self._lock = threading.Lock()
 
-    def __enter__(self) -> "_InMemoryCircuitBreaker":
+    def __enter__(self) -> _InMemoryCircuitBreaker:
         with self._lock:
             if self._state == CircuitState.OPEN:
                 elapsed = time.monotonic() - self._open_since

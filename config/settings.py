@@ -11,9 +11,7 @@ Design principle: "Fail loud at startup, never fail silently mid-test."
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Optional
 
 from dotenv import load_dotenv
 from pydantic import Field, field_validator, model_validator
@@ -57,7 +55,7 @@ class FrameworkSettings(BaseSettings):
     # -------------------------------------------------------------------------
     api_username: str = Field(..., description="API authentication username.")
     api_password: str = Field(..., description="API authentication password.")
-    api_token: Optional[str] = Field(
+    api_token: str | None = Field(
         default=None,
         description="Bearer token. If None, framework will attempt to fetch one.",
     )
@@ -65,7 +63,7 @@ class FrameworkSettings(BaseSettings):
     # -------------------------------------------------------------------------
     # TLS / SSL
     # -------------------------------------------------------------------------
-    ssl_ca_bundle: Optional[str] = Field(
+    ssl_ca_bundle: str | None = Field(
         default=None,
         description=(
             "Absolute path to a CA bundle file. "
@@ -106,7 +104,7 @@ class FrameworkSettings(BaseSettings):
     # -------------------------------------------------------------------------
     # Redis (optional — required for pytest-xdist distributed circuit breaker)
     # -------------------------------------------------------------------------
-    redis_url: Optional[str] = Field(
+    redis_url: str | None = Field(
         default=None,
         description=(
             "Redis connection URL for distributed circuit breaker state. "
@@ -144,7 +142,7 @@ class FrameworkSettings(BaseSettings):
 
     @field_validator("ssl_ca_bundle")
     @classmethod
-    def validate_ca_bundle_path(cls, v: Optional[str]) -> Optional[str]:
+    def validate_ca_bundle_path(cls, v: str | None) -> str | None:
         if v and not Path(v).is_file():
             raise ValueError(
                 f"SSL_CA_BUNDLE points to non-existent file: '{v}'. "
@@ -162,7 +160,7 @@ class FrameworkSettings(BaseSettings):
         return upper
 
     @model_validator(mode="after")
-    def validate_timeout_relationship(self) -> "FrameworkSettings":
+    def validate_timeout_relationship(self) -> FrameworkSettings:
         if self.request_connect_timeout >= self.request_read_timeout:
             raise ValueError(
                 "REQUEST_CONNECT_TIMEOUT must be less than REQUEST_READ_TIMEOUT. "
