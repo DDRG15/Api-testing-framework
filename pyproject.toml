@@ -1,0 +1,64 @@
+# =============================================================================
+# pyproject.toml — Static analysis and coverage configuration
+#
+# Tools configured here:
+#   Ruff   — linting + import sorting (replaces flake8 + isort)
+#   MyPy   — static type checking scoped to src/ and config/
+#   pytest-cov — branch coverage with 80% gate
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Build system (required by PEP 518 — not used for packaging, just presence)
+# ---------------------------------------------------------------------------
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+# ---------------------------------------------------------------------------
+# Ruff — linting
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (undefined names, unused imports)
+    "I",   # isort (import order)
+    "B",   # flake8-bugbear (likely bugs and design issues)
+    "UP",  # pyupgrade (use modern Python syntax)
+]
+ignore = [
+    "B008",  # do not perform function calls in default arguments — Pydantic uses this pattern
+    "E501",  # line too long — handled by formatter, not linter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B"]   # bugbear rules flag pytest patterns (e.g. assert comparisons)
+"conftest.py" = ["B"]
+
+# ---------------------------------------------------------------------------
+# MyPy — type checking (scoped to src/ and config/ only)
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true   # structlog and some third-party stubs are incomplete
+disallow_untyped_defs = true    # every function must have type annotations
+warn_return_any = true          # flag functions that silently return Any
+warn_unused_ignores = true      # flag stale # type: ignore comments
+exclude = ["^tests/", "^conftest\\.py$"]
+
+# ---------------------------------------------------------------------------
+# Coverage — 80% branch coverage gate
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["src", "config"]
+branch = true                   # branch coverage catches untested resilience paths
+omit = ["*/circuit_breaker_redis.py"]  # Redis impl requires live Redis to test
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false

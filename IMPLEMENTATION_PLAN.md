@@ -9,14 +9,14 @@
 
 - [x] **S1** — `config/settings.py` — Add HTTPS-only validator on `api_base_url` *(2026-05-19)*
 - [x] **S2** — `src/client/base_client.py:270` — Add HTTPS guard in `set_auth_token()` *(2026-05-19)*
-- [ ] **S3** — Add Ruff + MyPy static analysis (via `pyproject.toml` + CI job)
+- [x] **S3** — Add Ruff + MyPy static analysis (via `pyproject.toml` + CI job) *(2026-05-24)*
 - [ ] **S4** — Add pre-commit hooks (`.pre-commit-config.yaml`)
 
 ---
 
 ## A-Tier — High Priority (fix before first CI PR)
 
-- [ ] **A1** — Add `pytest-cov` with 80% branch coverage gate
+- [x] **A1** — Add `pytest-cov` with 80% branch coverage gate *(2026-05-24)*
 - [x] **A2** — `conftest.py:533` — Add token TTL expiry check in `_get_cached_teardown_token` *(2026-05-24)*
 - [x] **A3** — `src/client/booking_client.py:119` — Replace raw `dict` with `PartialBookingPayload` model on PATCH *(2026-05-19)*
 - [ ] **A4** — `.github/workflows/api-tests.yml` — Upload `leaked_resources.txt` as CI artifact
@@ -57,11 +57,11 @@
 | G5 | fix(observability): log truncation warning; inject CID into exceptions | 2026-05-24 | ✅ done |
 | G6 | fix(teardown): add token TTL check | 2026-05-24 | ✅ done |
 | G7 | fix(canary): replace CanaryPayload with canonical BookingPayload | 2026-05-19 | ✅ done |
-| G8 | chore: add pyproject.toml (Ruff + MyPy + coverage config) | — | pending |
+| G8 | chore: add pyproject.toml (Ruff + MyPy + coverage config) | 2026-05-24 | ✅ done |
 | G9 | ci: add code-quality job (Ruff + MyPy) to GitHub Actions | — | pending |
 | G10 | ci: add MyPy type-check job | — | pending |
 | G11 | chore: add .pre-commit-config.yaml + .secrets.baseline | — | pending |
-| G12 | ci: add pytest-cov; enforce 80% branch coverage gate | — | pending |
+| G12 | ci: add pytest-cov; enforce 80% branch coverage gate | 2026-05-24 | ✅ done |
 | G13 | ci: add pytest-rerunfailures; mark flaky tests selectively | — | pending |
 | G14 | ci: upload leaked_resources.txt as CI artifact | — | pending |
 | G15 | ci: remove allure-pytest; clean Dockerfile/docker-compose | — | pending |

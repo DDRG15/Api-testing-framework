@@ -38,5 +38,8 @@ structlog==24.4.0           # JSON-first structured logging pipeline
 # --- Reporting ---
 allure-pytest==2.13.5       # Allure-compatible report generation
 
+# --- Coverage ---
+pytest-cov==5.0.0           # Branch coverage gate (80% threshold enforced via pyproject.toml)
+
 # --- Security Auditing (CI gate) ---
 pip-audit==2.7.3            # CVE scanning against PyPI advisory database
