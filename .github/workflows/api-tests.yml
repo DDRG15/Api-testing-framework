@@ -140,7 +140,7 @@ jobs:
           cache: "pip"
 
       - name: Install analysis tools
-        run: pip install ruff==0.4.4 mypy==1.10.0 pydantic==2.8.2 pydantic-settings==2.4.0 structlog==24.4.0 tenacity==9.0.0 requests==2.33.0 redis==5.0.8
+        run: pip install ruff==0.4.4 mypy==1.10.0 pydantic==2.8.2 pydantic-settings==2.4.0 structlog==24.4.0 tenacity==9.0.0 requests==2.33.0 types-requests==2.32.0.20241016 redis==5.0.8
 
       - name: Ruff — lint check
         run: ruff check src/ config/
