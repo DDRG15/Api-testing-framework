@@ -42,6 +42,12 @@ _SENSITIVE_HEADER_PATTERNS: list[re.Pattern[str]] = [
 
 _MASK = "***REDACTED***"
 
+# Body keys whose values are credentials and must never reach a log sink.
+# Matched case-insensitively against the top-level keys of request/response bodies.
+_SENSITIVE_BODY_KEYS: frozenset[str] = frozenset(
+    {"password", "token", "secret", "authorization", "api_key", "apikey"}
+)
+
 # One unique ID per test-runner process invocation.
 RUN_ID: str = str(uuid.uuid4())
 
@@ -68,6 +74,27 @@ def _mask_sensitive_headers(
             else:
                 masked[header_name] = header_value
         event_dict[key] = masked
+    return event_dict
+
+
+def _mask_sensitive_body(
+    logger: WrappedLogger, method: str, event_dict: EventDict
+) -> EventDict:
+    """
+    Structlog processor: redacts credential fields in request/response bodies.
+
+    Header masking is not enough — the POST /auth body carries the password,
+    and a DEBUG-level log of that request would otherwise write the credential
+    verbatim into the JSONL sink (and the retained CI artifact). Masking the
+    envelope while mailing the letter is not masking. This closes that path.
+    """
+    for key in ("request_body", "response_body"):
+        body = event_dict.get(key)
+        if isinstance(body, dict):
+            event_dict[key] = {
+                k: (_MASK if str(k).lower() in _SENSITIVE_BODY_KEYS else v)
+                for k, v in body.items()
+            }
     return event_dict
 
 
@@ -107,6 +134,7 @@ def configure_logging(log_file: str, log_level: str = "INFO") -> None:
         structlog.contextvars.merge_contextvars,
         _inject_run_id,
         _mask_sensitive_headers,
+        _mask_sensitive_body,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
