@@ -71,6 +71,17 @@ from src.utils.logger import get_logger
 class SecurityError(RuntimeError):
     """Raised when an operation would compromise transport security."""
 
+
+class RetriesExhaustedError(RuntimeError):
+    """
+    Raised when all retry attempts are exhausted on a transient failure.
+
+    This is the framework's public contract for retry exhaustion. The
+    internal tenacity/_TransientHttpError types are never allowed to leak
+    past this boundary — callers catch this, and it always carries the
+    correlation ID in its message.
+    """
+
 logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -357,6 +368,10 @@ class ApiClient:
                             max_attempts=settings.retry_max_attempts,
                         )
 
+                    # Transient HTTP statuses (429/5xx) are detected and raised
+                    # INSIDE _execute_single_request, within the circuit-breaker
+                    # context, so a degraded upstream increments the breaker.
+                    # The raised _TransientHttpError drives the retry loop.
                     response = self._execute_single_request(
                         method=method,
                         url=url,
@@ -366,41 +381,20 @@ class ApiClient:
                         log=log,
                     )
 
-                    # For 429: parse Retry-After and carry it in the sentinel.
-                    # For other transients: raise with no delay override.
-                    if response.status_code in TRANSIENT_STATUS_CODES:
-                        retry_after: float | None = None
-
-                        if response.status_code == 429:
-                            raw_header = response.headers.get("Retry-After", "")
-                            retry_after = _parse_retry_after(raw_header)
-                            log.warning(
-                                "rate_limited_429",
-                                retry_after_header=raw_header or "<absent>",
-                                parsed_wait_s=retry_after,
-                                note=(
-                                    "Server is rate-limiting this client. "
-                                    "Honouring Retry-After before next attempt."
-                                    if retry_after
-                                    else "No Retry-After header. Using exponential backoff."
-                                ),
-                            )
-
-                        raise _TransientHttpError(
-                            response.status_code, url, retry_after
-                        )
-
-        except RetryError as exc:
+        # reraise=True means tenacity re-raises the ORIGINAL exception on
+        # exhaustion — it never raises RetryError. Catch the internal sentinel
+        # (and RetryError defensively) and convert to the public exhaustion
+        # error so the internal type never leaks and the CID is always present.
+        except (_TransientHttpError, RetryError) as exc:
             log.error(
                 "request_exhausted_retries",
                 max_attempts=settings.retry_max_attempts,
                 last_exception=str(exc),
             )
-            exc.args = (
+            raise RetriesExhaustedError(
                 f"All {settings.retry_max_attempts} retry attempts exhausted "
-                f"for {method.upper()} {url}. [correlation_id={cid}]",
-            )
-            raise
+                f"for {method.upper()} {url}. [correlation_id={cid}]"
+            ) from exc
         except CircuitBreakerOpenError:
             log.error("request_circuit_open", circuit_name=self._cb.name)
             raise
@@ -441,6 +435,12 @@ class ApiClient:
         """
         Executes exactly one HTTP request. Called by the retry loop.
         All failure information is logged here before propagating.
+
+        Transient HTTP statuses (429/5xx) are raised as _TransientHttpError
+        from INSIDE the circuit-breaker context, so a degraded upstream
+        increments the breaker's failure count. Connection errors and timeouts
+        are not the only signals that an upstream is unhealthy — a sustained
+        run of 503s is exactly the degradation the breaker exists to contain.
         """
         log.debug(
             "request_attempt",
@@ -461,6 +461,43 @@ class ApiClient:
                     timeout=settings.timeout_tuple,
                     allow_redirects=True,
                 )
+
+                elapsed_ms = int(response.elapsed.total_seconds() * 1000)
+                log_ctx = dict(
+                    status_code=response.status_code,
+                    elapsed_ms=elapsed_ms,
+                    response_headers=dict(response.headers),
+                )
+                if not response.ok:
+                    log.warning(
+                        "request_non_ok_response",
+                        response_body=self._safe_response_body(response, log),
+                        **log_ctx,
+                    )
+                else:
+                    log.debug("request_raw_response", **log_ctx)
+
+                # Transient status → raise INSIDE the breaker so it is counted
+                # as a failure. For 429, parse Retry-After first so the wait
+                # strategy can honour the server's instruction on the next try.
+                if response.status_code in TRANSIENT_STATUS_CODES:
+                    retry_after: float | None = None
+                    if response.status_code == 429:
+                        raw_header = response.headers.get("Retry-After", "")
+                        retry_after = _parse_retry_after(raw_header)
+                        log.warning(
+                            "rate_limited_429",
+                            retry_after_header=raw_header or "<absent>",
+                            parsed_wait_s=retry_after,
+                            note=(
+                                "Server is rate-limiting this client. "
+                                "Honouring Retry-After before next attempt."
+                                if retry_after
+                                else "No Retry-After header. Using exponential backoff."
+                            ),
+                        )
+                    raise _TransientHttpError(response.status_code, url, retry_after)
+
         except (ConnectTimeout, ReadTimeout, Timeout) as exc:
             elapsed_s = (time.perf_counter_ns() - start_ns) / 1e9
             log.error(
@@ -473,22 +510,6 @@ class ApiClient:
         except RequestsConnectionError as exc:
             log.error("request_connection_error", exception=str(exc))
             raise
-
-        elapsed_ms = int(response.elapsed.total_seconds() * 1000)
-        log_ctx = dict(
-            status_code=response.status_code,
-            elapsed_ms=elapsed_ms,
-            response_headers=dict(response.headers),
-        )
-
-        if not response.ok:
-            log.warning(
-                "request_non_ok_response",
-                response_body=self._safe_response_body(response, log),
-                **log_ctx,
-            )
-        else:
-            log.debug("request_raw_response", **log_ctx)
 
         return response
 

@@ -29,6 +29,8 @@ def test_production_canary_probe(booking_client):
     Used for safe verification against live production environments without
     triggering WAFs or polluting the database with high-entropy synthetic data.
     """
+    from conftest import deregister_from_cleanup, register_for_cleanup
+
     logger.info("canary_probe_start", payload="static")
 
     static_payload = BookingPayload(
@@ -43,15 +45,19 @@ def test_production_canary_probe(booking_client):
         additionalneeds="SRE Health Check",
     )
 
-    # 1. Create
+    # 1. Create — register for cleanup BEFORE the read so a failed assertion
+    #    cannot leak the booking into a live/production database.
     create_response = booking_client.create_booking(static_payload)
     booking_id = create_response.bookingid
+    register_for_cleanup(booking_id)
     logger.info("canary_deployed", booking_id=booking_id)
 
-    # 2. Read — validate round-trip integrity
-    read_response = booking_client.get_booking(booking_id)
-    assert read_response.firstname == "Canary"
-
-    # 3. Delete — always runs, even if assertions above fail
-    booking_client.delete_booking(booking_id)
-    logger.info("canary_neutralized", booking_id=booking_id)
+    try:
+        # 2. Read — validate round-trip integrity
+        read_response = booking_client.get_booking(booking_id)
+        assert read_response.firstname == "Canary"
+    finally:
+        # 3. Delete — runs unconditionally, even if the assertion above fails.
+        booking_client.delete_booking(booking_id)
+        deregister_from_cleanup(booking_id)
+        logger.info("canary_neutralized", booking_id=booking_id)

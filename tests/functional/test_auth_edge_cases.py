@@ -14,6 +14,7 @@ failures do not trip the shared circuit breaker used by other tests.
 from __future__ import annotations
 
 from src.client.base_client import ApiClient
+from src.models.booking import BookingPayload
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -95,50 +96,59 @@ class TestInvalidCredentials:
 class TestBadToken:
     """Operations requiring auth must reject invalid or absent tokens."""
 
-    def test_delete_with_invalid_token_returns_403(self, created_booking: int) -> None:
+    def test_delete_with_invalid_token_returns_403(
+        self, created_booking: tuple[int, BookingPayload]
+    ) -> None:
         """
         DELETE /booking/{id} with a fabricated token must return 403.
         A 200 here means the auth layer is not enforced.
         """
+        booking_id, _ = created_booking
         client = _raw_client()
         client._session.headers["Cookie"] = "token=this-is-not-a-real-token"
 
-        response = client.delete(f"/booking/{created_booking}")
+        response = client.delete(f"/booking/{booking_id}")
         assert response.status_code == 403, (
             f"Expected 403 Forbidden with invalid token, got {response.status_code}. "
             "Auth enforcement on DELETE is broken."
         )
 
         client.close()
-        logger.info("auth_edge_case_passed", case="invalid_token_delete", booking_id=created_booking)
+        logger.info("auth_edge_case_passed", case="invalid_token_delete", booking_id=booking_id)
 
-    def test_delete_with_no_token_returns_403(self, created_booking: int) -> None:
+    def test_delete_with_no_token_returns_403(
+        self, created_booking: tuple[int, BookingPayload]
+    ) -> None:
         """
         DELETE /booking/{id} with no Cookie header must return 403.
         """
+        booking_id, _ = created_booking
         client = _raw_client()
         # Ensure no token header is present
         client._session.headers.pop("Cookie", None)
 
-        response = client.delete(f"/booking/{created_booking}")
+        response = client.delete(f"/booking/{booking_id}")
         assert response.status_code == 403, (
             f"Expected 403 Forbidden with no token, got {response.status_code}. "
             "Auth enforcement on DELETE is broken."
         )
 
         client.close()
-        logger.info("auth_edge_case_passed", case="no_token_delete", booking_id=created_booking)
+        logger.info("auth_edge_case_passed", case="no_token_delete", booking_id=booking_id)
 
-    def test_put_with_invalid_token_returns_403(self, created_booking: int) -> None:
+    def test_put_with_invalid_token_returns_403(
+        self, created_booking: tuple[int, BookingPayload]
+    ) -> None:
         """
         PUT /booking/{id} with a fabricated token must return 403.
         Full update requires auth; a 200 here means the guard is bypassed.
         """
+        booking_id, _ = created_booking
         client = _raw_client()
         client._session.headers["Cookie"] = "token=fabricated-garbage-token"
 
         response = client.put(
-            f"/booking/{created_booking}",
+            f"/booking/{booking_id}",
             json={
                 "firstname": "Ghost",
                 "lastname": "Writer",
@@ -153,4 +163,4 @@ class TestBadToken:
         )
 
         client.close()
-        logger.info("auth_edge_case_passed", case="invalid_token_put", booking_id=created_booking)
+        logger.info("auth_edge_case_passed", case="invalid_token_put", booking_id=booking_id)
