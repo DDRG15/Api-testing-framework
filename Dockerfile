@@ -35,7 +35,7 @@
 #   This gives you both reproducibility AND a documented security patch trail.
 #
 # CURRENT PIN:
-#   python:3.11-slim @ sha256 (pinned 2026-04-28)
+#   python:3.11-slim @ sha256:a3ab0b96...e49ac0 (pinned 2026-06-06)
 #   Re-pin monthly or when a CVE is found. See Makefile target `pin-base-image`.
 # =============================================================================
 
@@ -43,7 +43,7 @@
 # To update: run `make pin-base-image` and replace the digest below.
 # DO NOT use `python:3.11-slim` without a digest — mutable tags are not
 # acceptable in a production CI pipeline.
-FROM python:3.11-slim AS base
+FROM python:3.11-slim@sha256:a3ab0b966bc4e91546a033e22093cb840908979487a9fc0e6e38295747e49ac0 AS base
 
 # ─── Metadata labels ───────────────────────────────────────────────────────
 LABEL org.opencontainers.image.description="Enterprise API Testing Framework" \

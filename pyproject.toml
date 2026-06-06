@@ -1,18 +1,16 @@
 # =============================================================================
 # pyproject.toml — Static analysis and coverage configuration
 #
+# This repository is a pytest test suite, not a distributable package, so there
+# is intentionally no [build-system] / [project] table. The install path is
+# `pip install -r requirements.txt` (see README). This file carries only the
+# tool configuration below.
+#
 # Tools configured here:
 #   Ruff   — linting + import sorting (replaces flake8 + isort)
 #   MyPy   — static type checking scoped to src/ and config/
 #   pytest-cov — branch coverage with 80% gate
 # =============================================================================
-
-# ---------------------------------------------------------------------------
-# Build system (required by PEP 518 — not used for packaging, just presence)
-# ---------------------------------------------------------------------------
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.backends.legacy:build"
 
 # ---------------------------------------------------------------------------
 # Ruff — linting
