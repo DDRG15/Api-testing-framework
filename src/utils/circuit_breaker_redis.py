@@ -114,10 +114,14 @@ class CircuitState(Enum):
 class CircuitBreakerOpenError(Exception):
     """Raised immediately when the circuit is OPEN — no network call is made."""
 
-    def __init__(self, name: str, open_since: float) -> None:
-        duration = time.monotonic() - open_since
+    def __init__(self, name: str, open_duration_seconds: float) -> None:
+        # The caller passes a pre-computed duration in its own clock domain.
+        # The in-memory breaker tracks open_since with time.monotonic(); the
+        # Redis breaker stores it as wall-clock time.time(). Computing the
+        # delta here against a single clock produced a nonsensical negative
+        # value in Redis mode (monotonic minus wall-clock).
         super().__init__(
-            f"Circuit breaker '{name}' is OPEN (tripped {duration:.1f}s ago). "
+            f"Circuit breaker '{name}' is OPEN (tripped {open_duration_seconds:.1f}s ago). "
             "Upstream is considered unavailable. Failing fast."
         )
 
@@ -212,7 +216,9 @@ class RedisCircuitBreaker:
                     return self  # Allow probe request through
 
                 open_since = float(self._client.hget(self._key, "open_since") or 0)
-                raise CircuitBreakerOpenError(self.name, open_since)
+                # open_since is wall-clock (time.time()) — compute the delta in
+                # the same domain.
+                raise CircuitBreakerOpenError(self.name, time.time() - open_since)
 
         return self
 
@@ -351,7 +357,8 @@ class _InMemoryCircuitBreaker:
                     logger.info("circuit_breaker_half_open", name=self.name)
                     self._state = CircuitState.HALF_OPEN
                 else:
-                    raise CircuitBreakerOpenError(self.name, self._open_since)
+                    # _open_since is monotonic — compute the delta in the same domain.
+                    raise CircuitBreakerOpenError(self.name, time.monotonic() - self._open_since)
         return self
 
     def __exit__(

@@ -547,6 +547,13 @@ _teardown_token_obtained_at: float | None = None
 
 def _get_cached_teardown_token() -> str:
     global _teardown_token_cache, _teardown_token_obtained_at
+    # Honour a pre-issued token exactly as the session `auth_token` fixture does.
+    # Without this, an operator who supplies only API_TOKEN (with placeholder
+    # username/password) gets working test auth but 403 on every teardown DELETE
+    # — silently leaking every booking the suite creates.
+    if settings.api_token:
+        return settings.api_token
+
     now = time.monotonic()
     token_age = (now - _teardown_token_obtained_at) if _teardown_token_obtained_at is not None else float("inf")
     if _teardown_token_cache is None or token_age > _TEARDOWN_TOKEN_TTL_SECONDS:

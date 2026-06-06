@@ -12,6 +12,7 @@ Design principle: "Fail loud at startup, never fail silently mid-test."
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from pydantic import Field, field_validator, model_validator
@@ -131,7 +132,11 @@ class FrameworkSettings(BaseSettings):
     @field_validator("api_base_url")
     @classmethod
     def enforce_https(cls, v: str) -> str:
-        is_local = "localhost" in v or "127.0.0.1" in v
+        # Exact host match — a substring test ("localhost" in v) would let
+        # http://localhost.attacker.example bypass the HTTPS requirement and
+        # transmit the token in plaintext to an attacker-controlled host.
+        host = (urlparse(v).hostname or "").lower()
+        is_local = host in {"localhost", "127.0.0.1", "::1"}
         if not is_local and not v.startswith("https://"):
             raise ValueError(
                 f"API_BASE_URL must use HTTPS to prevent auth tokens from travelling "

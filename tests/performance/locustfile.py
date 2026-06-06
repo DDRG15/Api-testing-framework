@@ -77,8 +77,11 @@ class BookingLoadUser(HttpUser):
         self._booking_client = BookingClient(api_client)
         self._factory = BookingDataFactory()
 
-        username = os.environ.get("API_USERNAME", "admin")
-        password = os.environ.get("API_PASSWORD", "password123")
+        # No hardcoded fallback credentials — the framework's first principle is
+        # "no credentials in source code." A missing var fails loud here rather
+        # than silently authenticating with a baked-in default.
+        username = os.environ["API_USERNAME"]
+        password = os.environ["API_PASSWORD"]
         self._booking_client.authenticate(username=username, password=password)
 
     @task(3)

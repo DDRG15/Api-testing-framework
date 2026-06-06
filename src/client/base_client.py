@@ -43,6 +43,7 @@ import time
 import uuid
 from email.utils import parsedate_to_datetime
 from typing import Any, cast
+from urllib.parse import urlparse
 
 import structlog
 from requests import Response, Session
@@ -282,7 +283,10 @@ class ApiClient:
 
     def set_auth_token(self, token: str) -> None:
         """Inject a session token for the lifetime of this client."""
-        is_local = "localhost" in self._base_url or "127.0.0.1" in self._base_url
+        # Exact host match — a substring test would let a hostile host such as
+        # http://localhost.attacker.example slip past and leak the token.
+        host = (urlparse(self._base_url).hostname or "").lower()
+        is_local = host in {"localhost", "127.0.0.1", "::1"}
         if not is_local and not self._base_url.startswith("https://"):
             raise SecurityError(
                 f"Refusing to set auth token on non-HTTPS base URL '{self._base_url}'. "
