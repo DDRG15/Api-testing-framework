@@ -44,7 +44,6 @@ api-testing-framework/
 │   └── test-job.yaml             # Kubernetes Job manifest — non-root, secret injection
 │
 ├── IMPLEMENTATION_PLAN.md        # Overhaul tracking — checkbox per item, date when completed
-├── EXECUTION_GUIDE.md            # Exact code changes per commit group for resumable execution
 ├── conftest.py                   # Session/function fixtures, TTL-gated teardown token, orphan registry
 ├── pyproject.toml                # Ruff + MyPy + coverage config (80% branch gate)
 ├── pytest.ini                    # pytest config: timeout, JUnit/HTML output, coverage flags

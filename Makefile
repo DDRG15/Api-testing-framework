@@ -89,9 +89,10 @@ pin-base-image:  ## Fetch and display the current python:3.11-slim SHA256 digest
 audit:  ## Run pip-audit CVE scan against requirements.txt
 	pip-audit -r requirements.txt --strict
 
-lint:  ## Run Ruff linter on src/ and config/
+lint:  ## Run Ruff + MyPy on src/ and config/ (same gate as CI)
 	ruff check src/ config/
-	@echo "✅ Ruff lint passed."
+	mypy src/ config/
+	@echo "✅ Ruff + MyPy passed."
 
 # ---------------------------------------------------------------------------
 clean:  ## Remove all generated files (logs, reports, __pycache__)

@@ -56,8 +56,9 @@ spec:
       containers:
         - name: api-test-runner
           # Pin to the exact image digest built by CI for reproducibility.
-          # Replace <SHA> with the digest from the build-image CI job output.
-          image: ghcr.io/ddrg15/enterprise-api-testing-framework/api-test-runner:<SHA>
+          # Replace <DIGEST> with the sha256 digest printed by the build-image
+          # CI job (docker/build-push-action emits it as the image digest).
+          image: ghcr.io/ddrg15/enterprise-api-testing-framework/api-test-runner@sha256:<DIGEST>
           imagePullPolicy: Always
 
           command: ["python", "-m", "pytest", "--tb=short", "--verbose", "--timeout=60"]

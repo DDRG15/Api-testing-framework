@@ -67,15 +67,10 @@ class BookingResponse(BaseModel):
 class CreateBookingResponse(BaseModel):
     """Wrapper returned by POST /booking."""
 
+    # gt=0 already rejects a missing/zero/negative ID with a clear ValidationError,
+    # so no extra model_validator is needed here.
     bookingid: int = Field(..., gt=0, description="Server-assigned ID. Must be positive.")
     booking: BookingResponse
-
-    @model_validator(mode="after")
-    def booking_id_must_be_present(self) -> CreateBookingResponse:
-        # Redundant with gt=0 but explicit for audit trail purposes.
-        if not self.bookingid:
-            raise ValueError("API returned a booking without an ID — data integrity violation.")
-        return self
 
 
 class BookingSummary(BaseModel):

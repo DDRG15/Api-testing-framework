@@ -19,9 +19,14 @@ Design principles for Tier-1 test data:
                    database for that run_id and know exactly which CI run
                    created it.
 
-  DETERMINISM    — Passing `seed` produces the same data every time.
-                   This is critical for reproducing a specific failing test
-                   from a CI log: grab the seed from the log, re-run locally.
+  DETERMINISM    — Passing `seed` makes the Faker-derived fields (names, price,
+                   additionalneeds) reproducible. Identifiers are deliberately
+                   NOT seeded: every payload embeds a fresh uuid4 suffix and
+                   today-relative dates so it stays collision-free across
+                   parallel workers and repeated runs (see UNIQUENESS — the two
+                   properties are in tension and uniqueness wins). To reproduce
+                   a failure, the seed reproduces the field VALUES; the unique
+                   suffix and dates will differ by design.
 
   BOUNDARY COVERAGE — The factory can generate edge-case payloads on demand:
                    max-length strings, minimum price (0), Unicode names, etc.

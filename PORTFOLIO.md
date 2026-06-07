@@ -157,8 +157,13 @@ The `BookingDataFactory` generates four categories of test data:
 - `minimum_price()`: `totalprice = 0` — boundary value for financial amount fields
 - `unicode_names()`: Names from Japanese (`ja_JP`), Chinese (`zh_CN`), Arabic (`ar_EG`), and Russian (`ru_RU`) locales using valid Faker locale codes that produce actual non-Latin script
 
-The factory seed is logged on every test. Any failure is reproducible by
-passing the logged seed back to `BookingDataFactory(seed=<value>)`.
+The factory seed is logged on every test. The seed reproduces the Faker-derived
+field *values* (names, price, additionalneeds) by passing it back to
+`BookingDataFactory(seed=<value>)`. Record identifiers are intentionally not
+seeded — every payload carries a fresh UUID suffix and today-relative dates so
+it stays collision-free across parallel workers and repeated runs. Uniqueness
+and full determinism are in direct tension; uniqueness wins, because a suite
+that collides in shared staging is worse than one whose replay differs by a UUID.
 
 **Financial relevance:** Hardcoded `"TestUser"` payloads miss an entire class of
 bugs. Unicode encoding bugs in customer name fields affect real customers. Zero-

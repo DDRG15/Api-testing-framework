@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Load .env only if it exists (local dev). In CI, vars are injected directly.
@@ -44,7 +44,6 @@ class FrameworkSettings(BaseSettings):
     api_base_url: str = Field(
         ...,
         description="Base URL of the API under test. No trailing slash.",
-        json_schema_extra={"env": "API_BASE_URL"},
     )
     api_version: str = Field(
         default="v1",
@@ -196,7 +195,10 @@ class FrameworkSettings(BaseSettings):
 # ---------------------------------------------------------------------------
 try:
     settings = FrameworkSettings()  # type: ignore[call-arg]
-except Exception as exc:
+except ValidationError as exc:
+    # Narrowed to ValidationError so a genuine config problem gets this clear
+    # message, while an unrelated bug (e.g. an AttributeError) surfaces normally
+    # instead of being mislabelled "CONFIGURATION ERROR".
     raise SystemExit(
         "\n"
         "╔══════════════════════════════════════════════════════════════╗\n"
