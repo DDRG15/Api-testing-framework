@@ -81,6 +81,11 @@ After a configurable number of consecutive failures, the circuit transitions to
 `OPEN` and all subsequent calls fail immediately without reaching the network.
 After a recovery timeout, one probe request is allowed through (HALF-OPEN state).
 
+The failure signal is counted *inside* the breaker context, so a sustained run
+of transient HTTP statuses (502/503/504) trips the breaker — not just hard
+connection errors and timeouts. A degraded upstream that keeps answering "503"
+is exactly the case the breaker exists for, so it must register as a failure.
+
 **Financial relevance:** If an upstream API is degraded, a test suite without a
 circuit breaker will execute every test, every retry, against a struggling service.
 This amplifies the incident. In a financial system, this is called a "thundering
@@ -95,9 +100,12 @@ Every log line is a JSON object. No plain text. Every line carries:
 - `run_id`: unique per test-runner process invocation
 - `correlation_id`: unique per HTTP request, injected as `X-Correlation-ID` header
 - `timestamp` in ISO 8601 UTC
-- Masked sensitive headers (`Authorization`, `X-API-Key`, `Cookie`) — values
-  are replaced with `***REDACTED***` by a structlog processor before the log
-  event reaches any sink
+- Masked sensitive headers (`Authorization`, `X-API-Key`, `Cookie`) AND
+  credential fields inside request/response bodies (`password`, `token`,
+  `secret`, …) — values are replaced with `***REDACTED***` by structlog
+  processors before the log event reaches any sink. Masking the headers but
+  not the `/auth` request body would leak the password at DEBUG level; both
+  paths are closed.
 
 **Financial relevance:** A plain-text log that leaks an `Authorization: Bearer`
 token is not just a quality problem — it is a security incident. In a regulated
@@ -209,7 +217,7 @@ process. A CI pipeline that blocks on known CVEs is the automation of that proce
 
 The structured log already carries `correlation_id` on every line. That is sufficient when you have the log. It is not sufficient when you only have the pytest traceback — which is what you see first when a test fails in CI.
 
-When an SLO threshold is breached, the `AssertionError` message now ends with `[correlation_id=<cid>]`. When all retries are exhausted, `RetryError.args` is rewritten with the same pattern before re-raise. The result: the CID appears in the pytest failure output, the GitHub Actions annotation, and any Slack notification derived from the JUnit XML — without requiring anyone to cross-reference a JSONL file to find out which request caused the failure.
+When an SLO threshold is breached, the `AssertionError` message now ends with `[correlation_id=<cid>]`. When all retries are exhausted, the client raises a public `RetriesExhaustedError` carrying the same `[correlation_id=<cid>]` — a deliberate boundary, because `tenacity` with `reraise=True` re-raises the *original* exception rather than a catchable `RetryError`, and the internal transient sentinel must never leak to callers. The result: the CID appears in the pytest failure output, the GitHub Actions annotation, and any Slack notification derived from the JUnit XML — without requiring anyone to cross-reference a JSONL file to find out which request caused the failure.
 
 **Financial relevance:** A test failure that does not contain enough information to start an investigation is a failure that will consume 20 minutes of an on-call engineer's time at 02:00. The CID is the single token that connects the test failure, the log line, and the upstream request trace. It belongs in the exception.
 

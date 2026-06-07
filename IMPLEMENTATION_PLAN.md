@@ -69,3 +69,27 @@
 | G17 | chore: dead comment, docker-compose version, Makefile lint | 2026-05-24 | ✅ done |
 | G18 | feat: add Locust performance baseline | 2026-05-24 | ✅ done |
 | G19 | feat: add k8s/test-job.yaml Kubernetes Job manifest | 2026-05-24 | ✅ done |
+
+---
+
+## Pre-Flight Audit Remediation (2026-06-06)
+
+A full 6-persona audit (SEC/SRE/SDET/ARCH/DEV/DATA) produced 13 findings; all were resolved.
+
+| ID | Severity | Fix |
+|----|----------|-----|
+| F1 | HIGH | Auth edge-case tests unpacked `created_booking` as `int`; it yields `tuple[int, BookingPayload]`. Fixed unpack. |
+| F2 | HIGH | Log masking covered headers only; `/auth` body password leaked at DEBUG. Added body-field masking processor + unit test. |
+| F3 | HIGH | `reraise=True` made `except RetryError` dead code; CID never injected, internal sentinel leaked. Added public `RetriesExhaustedError`. |
+| F4 | MED | 5xx raised outside breaker context → breaker never tripped on a degraded upstream. Moved transient raise inside the breaker. |
+| F5 | MED | `CircuitBreakerOpenError` mixed `monotonic`/wall-clock → garbage duration in Redis mode. Pass a pre-computed duration per clock domain. |
+| F6 | MED | Canary DELETE not in `finally` and unregistered → prod leak on assertion failure. Wrapped in try/finally + orphan registry. |
+| F7 | MED | Dockerfile lectured on digest pinning but used a mutable tag. Pinned `python:3.11-slim@sha256:…`. |
+| F8 | MED | `pyproject.toml` declared a non-existent build backend → `pip install -e .` broke. Removed the `[build-system]` table. |
+| F9 | MED | "Same seed → same data" was false (uuid4/dates unseeded). Scoped the claim to Faker-derived field values. |
+| F10 | MED | `admin`/`password123` hardcoded as locustfile fallbacks. Removed; env vars now required. |
+| F11 | LOW | HTTPS guard used substring `localhost` match (bypassable). Now exact-host via `urlparse`. |
+| F12 | LOW | Teardown auth ignored `API_TOKEN`. Now honours it, matching the session fixture. |
+| F13 | LOW | `EXECUTION_GUIDE.md` carried `Co-Authored-By` lines + stale status. Deleted (record lives here). |
+
+Also added an offline `tests/unit/` suite (logger masking, retry exhaustion, breaker trip) that runs without live credentials, and brought all documentation into line with the fixed code.

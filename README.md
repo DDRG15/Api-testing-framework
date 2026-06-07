@@ -37,6 +37,9 @@ api-testing-framework/
 │   │   └── test_auth_edge_cases.py     # Auth boundary tests: bad creds, invalid token, no token
 │   ├── contract/
 │   │   └── test_schema_contracts.py    # Schema drift detection tests
+│   ├── unit/
+│   │   ├── test_logger_masking.py      # Offline: credential-redaction processors
+│   │   └── test_retry_and_breaker.py   # Offline: retry exhaustion + breaker trip (no live API)
 │   └── performance/
 │       └── locustfile.py               # Locust load baseline (requires requirements-perf.txt)
 │
@@ -76,7 +79,7 @@ api-testing-framework/
 ### Absolute Observability
 - Every log line is a JSON object — parseable by Splunk/Datadog/CloudWatch.
 - On failure: URL, method, headers (masked), payload, status, body, elapsed time logged.
-- `X-Correlation-ID` injected into every `AssertionError` (SLO breach) and `RetryError` message — greppable in any SIEM without cross-referencing the JSONL log.
+- `X-Correlation-ID` injected into every `AssertionError` (SLO breach) and the `RetriesExhaustedError` raised when retries are exhausted — greppable in any SIEM without cross-referencing the JSONL log. (The internal retry sentinel never leaks past the client; callers always get `RetriesExhaustedError` with the CID.)
 - When a response body exceeds 4096 chars, a `response_body_truncated` warning is emitted with `full_length` — operators know exactly what they're not seeing.
 - A unique `run_id` is bound to every log line for cross-run filtering.
 
@@ -97,6 +100,7 @@ api-testing-framework/
 - `API_BASE_URL` is validated at startup: any non-localhost URL that is not `https://` raises `ValueError` before a single test runs. The auth token is never transmitted over plaintext.
 - `set_auth_token()` enforces the same HTTPS check at the client level — belt-and-suspenders against programmatic bypass.
 - Sensitive headers (Authorization, Cookie, X-API-Key) are masked in logs.
+- Credential fields inside request/response bodies (`password`, `token`, `secret`, …) are masked by the same processor — header masking alone would leak the `/auth` password at DEBUG level.
 - SSL verification is architecturally non-negotiable — `verify=False` is impossible.
 
 ### Contract Testing
