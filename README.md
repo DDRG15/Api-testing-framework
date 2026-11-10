@@ -1,261 +1,211 @@
-# Enterprise API Testing Framework
+# API Testing Framework
 
-Let's be real: testing a REST API on the happy path is trivial. Testing one at the reliability standards of a Tier-1 financial system—where a dropped packet means real money is lost—is an entirely different beast. I engineered this framework with Python, `pytest`, and a healthy dose of operational paranoia to guarantee one thing: **zero false positives.**
+A personal REST API testing toolkit built with Python, pytest, and Pydantic. It checks response contracts, HTTP client resilience, and persisted effects, then preserves evidence for each phase and attempt.
 
----
+Licensed under the [MIT License](LICENSE). Third-party dependencies retain their own
+licenses.
 
-## Architecture Overview
+[Explore the interactive architecture](docs/architecture.html): hover to trace connections, click to pin a node, and press Escape to reset. Open the HTML in a browser, or use the [architecture source and component guide](docs/ARCHITECTURE.md).
 
-Here is the blueprint. Notice the dual-strategy circuit breaker—because relying on a single point of failure is a rookie move.
+## Start with the local console
+
+Linux users can run `./api-lab setup`, then `./api-lab start`. The optional
+`./api-lab install` adds an application-menu entry. See the
+[Linux launcher guide](docs/LINUX_LAUNCHER.md) for dependencies, shutdown and MCP
+entrypoints. The launcher uses Python and Node.js; it is not a standalone binary.
+
+Create a sandbox environment and install the core toolchain:
+
+```bash
+python3 -m venv ~/sandbox/enterprise-api-testing-framework/venv
+source ~/sandbox/enterprise-api-testing-framework/venv/bin/activate
+export PYTHONDONTWRITEBYTECODE=1
+python -m pip install -r requirements-dev.txt
+python scripts/console.py
+```
+
+Open the private loopback URL printed by the command. The React console runs
+offline checks, compares contracts and evaluates the supplied synthetic sample,
+then shows actual results. Node.js 22.12+ and npm are required for the first
+frontend build; dependencies, build outputs and evidence stay in sandbox.
+These offline checks need no account, API key or `.env`. See the
+[console guide](docs/LOCAL_CONSOLE.md).
+
+For your own endpoint, open **Connections** and configure a GET response contract
+with optional Bearer/header authentication. Separate OpenAI/Anthropic BYOK forms
+check provider catalog authentication. Credentials remain in the server process
+for the session; model text generation is not implemented. See
+[Connections and editor usage](docs/CONNECTIONS.md). The offline checks still
+require no provider key.
+
+To share the open console's Connections profiles with an MCP-compatible host,
+run `./api-lab mcp-setup --console --format codex` or `--format claude` on Linux.
+For standalone offline operations, run `python scripts/setup_mcp.py` from the
+core environment. Both helpers print configuration for you to merge into your
+host settings. The optional SDK has its own sandbox venv and does not change
+the core contract dependencies. See [MCP setup](docs/MCP.md).
+
+## Execution paths
+
+| Path | Purpose | Dependencies and limits |
+|---|---|---|
+| Offline | Unit tests, versioned contracts, and controlled failures. | Includes a local HTTP payment lab with SQLite and synthetic data. No Stripe account or external service is required. |
+| Live demo | A single-worker canary before CRUD checks against Restful-Booker. | Depends on the public provider and configuration. Its results are separate from the offline path. |
+| Configured integration | Functional and contract tests for a Restful-Booker-compatible booking API. | Another API requires compatible endpoints or adapted clients/tests, plus a controlled test environment. |
+| Connections | One configured JSON GET response contract, or OpenAI/Anthropic catalog authentication. | Settings and credentials remain in the console process for the session. These checks use the network and do not generate model text or adapt the booking suite. |
+
+The payment lab is a controlled reference system. Passing its tests does not establish the behavior of another billing service, PostgreSQL, or Stripe.
+
+## Local execution
+
+From the project root, create a development environment outside the repository:
+
+```bash
+python3 -m venv ~/sandbox/enterprise-api-testing-framework/venv
+source ~/sandbox/enterprise-api-testing-framework/venv/bin/activate
+export PYTHONDONTWRITEBYTECODE=1
+python -m pip install -r requirements.txt
+```
+
+Run the offline checks:
+
+```bash
+python scripts/run_offline.py
+```
+
+The runner writes to `~/sandbox/enterprise-api-testing-framework/runs/<UTC-timestamp>-<id>/`, or to a **new** directory supplied with `--output`. It refuses to reuse an existing directory. Source code, durable tests, and expected contracts remain in the project.
+
+Outputs include `summary.md`, `summary.json`, phase evidence in `results-*.jsonl`, `report.html`, `junit.xml`, `coverage.xml`, and `pytest.log`. `manifest.json` records the revision, working-tree state, Python version, command, exit code, installed dependency versions, and artifact and source hashes. Keep these files together to review what ran.
+
+Select tests after `--`:
+
+```bash
+python scripts/run_offline.py -- tests/offline/test_billing_reliability.py
+```
+
+Check the contract baseline and selected client defects:
+
+```bash
+python scripts/check_contracts.py
+python scripts/mutation_check.py
+```
+
+Review model changes alongside their snapshot diff. Updating a baseline without examining the change does not validate provider compatibility. Mutation checks use isolated source copies after a passing baseline; their report covers selected defects, not a general mutation score for the whole project.
+
+## External API checks
+
+Prepare configuration from [.env.example](.env.example), using values for a Restful-Booker-compatible test environment:
+
+```bash
+cp .env.example .env
+# Set API_BASE_URL, API_USERNAME, and API_PASSWORD; do not publish .env.
+LIVE_OUTPUT="$HOME/sandbox/enterprise-api-testing-framework/live/$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$LIVE_OUTPUT"
+export FRAMEWORK_RESULTS_DIR="$LIVE_OUTPUT" LOG_FILE="$LIVE_OUTPUT/http.jsonl"
+export PYTHONDONTWRITEBYTECODE=1 TMPDIR="$LIVE_OUTPUT"
+python -m pytest -o addopts='' --timeout=60 tests/functional/test_canary.py -n 0 \
+  --junitxml="$LIVE_OUTPUT/canary.xml" --html="$LIVE_OUTPUT/canary.html" --self-contained-html
+# Continue only if the canary passes.
+python -m pytest -o addopts='' --timeout=60 tests/functional tests/contract -n 0 \
+  --junitxml="$LIVE_OUTPUT/acceptance.xml" --html="$LIVE_OUTPUT/acceptance.html" --self-contained-html
+```
+
+These tests create and delete bookings. The template contains placeholders:
+replace the URL, credentials and log path with your test configuration. The
+public-demo workflow separately declares its demonstration values. Configure
+Redis when parallel workers need shared breaker state. The in-memory breaker
+shares state only within its process. See [configuration and publication](docs/CONFIGURATION.md).
+
+These bounded commands clear the general `addopts`; they do not attempt to satisfy the full-suite coverage gate. The configured integration workflow retains its own policy.
+
+## Test history reports
+
+Build a history report from phase-evidence files retained across runs:
+
+```bash
+python scripts/build_history_report.py \
+  "$HOME/sandbox/enterprise-api-testing-framework/runs/"*/results-*.jsonl \
+  --output "$HOME/sandbox/enterprise-api-testing-framework/history/report-$(date -u +%Y%m%dT%H%M%SZ)"
+```
+
+The new output directory contains `history.html`, `history.json`, and `history.csv`. The HTML works offline; click a cell to inspect its run, attempts, outcome, and source evidence. The JSON retains source hashes.
+
+Rows separate tests and recorded contexts, including context digest, environment, revision, and contract. Unknown context or unverified chronology stays visible and is not classified across runs. Review classification requires unique timezone-aware `run_started_utc` timestamps. By default, at least 10 comparable pass/fail outcomes and 3 outcome switches make a test a **candidate for human review**; adjust these criteria with `--min-runs` and `--min-switches`. Expected failures do not contribute to those binary outcomes.
+
+A valid history report exits successfully even when it contains past failures: it is a diagnostic report, not a CI quality gate. Empty or malformed input exits with code 2 before creating output. It does not quarantine tests automatically or prove that a recovered rerun was a false positive.
+
+## Structured response evaluation
+
+Evaluate captured responses using the supplied synthetic configuration and JSONL sample:
+
+```bash
+python scripts/evaluate_responses.py \
+  --config fixtures/evaluation/config.json \
+  --input fixtures/evaluation/synthetic_responses.jsonl \
+  --output "$HOME/sandbox/enterprise-api-testing-framework/evaluations/sample-$(date -u +%Y%m%dT%H%M%SZ)"
+```
+
+The evaluator writes `evaluation.json` and `evaluation.md` to a new directory. It checks the configured JSON Schema and deterministic properties instead of requiring identical response text. Supported invariants compare an ordered numeric range or a total with its parts, using JSON Pointer locations and a configured absolute tolerance. Results are grouped by case, model, and prompt; reports do not include raw response bodies.
+
+The supplied input contains four valid synthetic records for one example case and model, with varied outputs across two prompt versions. The command makes no model calls. Keep the input and configuration alongside the reports for review; this example does not validate a live AI provider. Descriptive nearest-rank p95 requires at least 20 latency observations; smaller groups report no p95. This statistic describes the sample, not a production SLA or confidence guarantee.
+
+Exit code 0 requires nonempty input with every record valid. Invalid records, schema/invariant failures, or an empty corpus return 1. Invalid configuration, unreadable input, or reuse of an output directory returns 2.
+
+## Reliability features
+
+- **Replay-aware retries:** transient failures are evaluated together with method safety. POST and PATCH require explicit replay permission backed by server-side deduplication; a header alone cannot provide idempotency.
+- **Circuit breaker:** in-memory behavior for one process and a Redis alternative for shared state. Controlled checks cover retry exhaustion and circuit opening.
+- **Versioned contracts:** Pydantic models and JSON Schema snapshots in `fixtures/contracts/`. These are local baselines, not complete OpenAPI or consumer compatibility coverage.
+- **Synthetic test data:** Faker and UUID suffixes reduce collisions. Fixtures attempt cleanup and record resources they could not delete.
+- **Persistence checks:** the local payment lab exercises duplicate delivery, concurrency, and lost responses after commit. Approved read-only queries check the resulting database state.
+- **Per-attempt evidence:** setup, call, and teardown outcomes retain run context and initial failures. HTTP retries and test reruns remain distinct.
+- **Diagnostics:** JSON logs include run IDs, correlation IDs, and configured credential-pattern masking. Avoid unnecessary sensitive values in payloads.
+- **Bounded latency:** explicit timeouts and per-response thresholds. These assertions do not establish statistical availability or a service-level agreement.
+
+## CI and coverage
+
+| Workflow | Purpose |
+|---|---|
+| [offline-tests.yml](.github/workflows/offline-tests.yml) | Reproducible checks and artifacts without relying on a public API. |
+| [live-demo.yml](.github/workflows/live-demo.yml) | Separate public demo, starting with a canary; external failures remain visible. |
+| [api-tests.yml](.github/workflows/api-tests.yml) | Configured integration: dependency audit, static analysis, Docker image, and tests using environment secrets. |
+| [local-console.yml](.github/workflows/local-console.yml) | Build the locked React frontend and test the optional MCP stdio connection in isolated environments. |
+
+The configured integration validates `API_BASE_URL`, `API_USERNAME`, and `API_PASSWORD` before running. Missing configuration fails explicitly. Workflow files describe intended execution; consult actual runs and artifacts for results.
+
+The general configuration sets an **80% coverage threshold with branch measurement enabled**. It is not a separate 80% branch threshold. The offline path reports coverage with `--cov-fail-under=0`; its narrower scope does not certify the full gate. Reports must retain their command, exclusions, and source context. Real Redis coordination and external providers need separate checks.
+
+The project also includes a Locust baseline in `tests/performance/locustfile.py`, a Dockerfile, and a Job in `k8s/`. These are execution options; their presence alone does not establish scale, performance, or a production deployment.
+
+## Source layout
 
 ```text
-api-testing-framework/
-│
-├── .github/
-│   └── workflows/
-│       └── api-tests.yml         # CI/CD: security-audit → code-quality → build-image → api-tests
-│
-├── config/
-│   └── settings.py               # Pydantic-validated config — enforces HTTPS, fails at startup
-│
-├── src/
-│   ├── client/
-│   │   ├── base_client.py        # Core HTTP client: retries, circuit breaker, SLO, CID injection
-│   │   └── booking_client.py     # Domain client: typed methods returning Pydantic models
-│   ├── models/
-│   │   └── booking.py            # API contracts: BookingPayload, PartialBookingPayload, responses
-│   └── utils/
-│       ├── circuit_breaker.py          # Public interface — selects in-memory or Redis impl
-│       ├── circuit_breaker_redis.py    # Distributed Redis circuit breaker with Lua atomicity
-│       ├── data_factory.py             # Faker-based synthetic data: realistic, edge-case, unicode
-│       └── logger.py                   # Structured JSON logger with secret masking
-│
-├── tests/
-│   ├── functional/
-│   │   ├── test_bookings_crud.py       # Full CRUD lifecycle + idempotency + edge cases
-│   │   ├── test_canary.py              # Canary probe — smoke+flaky marked, static payload
-│   │   └── test_auth_edge_cases.py     # Auth boundary tests: bad creds, invalid token, no token
-│   ├── contract/
-│   │   └── test_schema_contracts.py    # Schema drift detection tests
-│   ├── unit/
-│   │   ├── test_logger_masking.py      # Offline: credential-redaction processors
-│   │   └── test_retry_and_breaker.py   # Offline: retry exhaustion + breaker trip (no live API)
-│   └── performance/
-│       └── locustfile.py               # Locust load baseline (requires requirements-perf.txt)
-│
-├── k8s/
-│   └── test-job.yaml             # Kubernetes Job manifest — non-root, secret injection
-│
-├── IMPLEMENTATION_PLAN.md        # Overhaul tracking — checkbox per item, date when completed
-├── conftest.py                   # Session/function fixtures, TTL-gated teardown token, orphan registry
-├── pyproject.toml                # Ruff + MyPy + coverage config (80% branch gate)
-├── pytest.ini                    # pytest config: timeout, JUnit/HTML output, coverage flags
-├── requirements.txt              # All versions pinned — pip-audit gates every bump
-├── requirements-perf.txt         # Locust — isolated so it never enters the CI image
-├── .pre-commit-config.yaml       # Ruff + MyPy + detect-secrets hooks
-├── .secrets.baseline             # detect-secrets known-safe baseline (empty — zero known secrets)
-├── .env.example                  # Template — copy to .env, never commit .env
-└── .gitignore
+api-lab                            Linux launcher for the local console and MCP setup
+assets/                            Application icon
+config/settings.py                 Validated configuration
+src/client/                        HTTP client and domain adapters
+src/models/booking.py              Booking models
+src/utils/                         Contracts, results, data, breaker, and oracle
+tests/unit/                        Unit tests
+tests/offline/                     Controlled reliability scenarios
+tests/fixtures/                    Reference server and test helpers
+tests/functional/                  CRUD, canary, and authentication checks
+tests/contract/                    API response contracts
+tests/mcp/                         MCP stdio smoke check
+tests/performance/                 Locust baseline
+fixtures/contracts/                Versioned model schemas
+fixtures/evaluation/               Synthetic evaluation configuration and inputs
+scripts/                           Execution and reporting tools
+src/control/                       Shared local operation service and HTTP adapter
+ui/                                React console source and dependency lockfile
+docs/ARCHITECTURE.md               Current architecture and component guide
+docs/architecture.html             Standalone interactive architecture
+docs/                              Console, Connections, MCP, launcher and configuration guides
+k8s/                               Kubernetes Job manifest
+.github/workflows/                 CI workflows
 ```
 
----
-
-## Engineering Principles
-
-### Zero False Positives
-- Retries use exponential backoff **only** on transient codes (429, 502, 503, 504).
-- Logic errors (400, 401, 403, 404) **hard fail immediately** — retrying them is just noise.
-- `pytest-randomly` randomizes test order to expose hidden order dependencies.
-- `pytest-timeout` provides a global 60s watchdog for hangs outside HTTP calls.
-- `pytest-xdist` parallel execution coordinated safely via cross-platform OS locks (`filelock`).
-- `pytest-rerunfailures` gives live-API tests one retry before failing — distinguishes a real bug from a BGP hiccup.
-
-### Data Integrity & Idempotency
-- All payloads use UUID-derived identifiers — zero collision between parallel runs.
-- `created_booking` fixture uses `yield` + `finally` — teardown is unconditional.
-- Teardown token cache includes a 1-hour TTL with `time.monotonic()` — expired tokens no longer silently leave orphan records.
-- An orphan registry sweeps any resource not cleaned up by its owning test.
-
-### Absolute Observability
-- Every log line is a JSON object — parseable by Splunk/Datadog/CloudWatch.
-- On failure: URL, method, headers (masked), payload, status, body, elapsed time logged.
-- `X-Correlation-ID` injected into every `AssertionError` (SLO breach) and the `RetriesExhaustedError` raised when retries are exhausted — greppable in any SIEM without cross-referencing the JSONL log. (The internal retry sentinel never leaks past the client; callers always get `RetriesExhaustedError` with the CID.)
-- When a response body exceeds 4096 chars, a `response_body_truncated` warning is emitted with `full_length` — operators know exactly what they're not seeing.
-- A unique `run_id` is bound to every log line for cross-run filtering.
-
-### Static Analysis & Quality Gates
-- **Ruff** (E/W/F/I/B/UP rules) enforced on `src/` and `config/` — in CI and via pre-commit hook.
-- **MyPy** (`disallow_untyped_defs`, `warn_return_any`) enforced on `src/` and `config/`.
-- **pytest-cov** enforces 80% branch coverage — branch coverage catches resilience paths (circuit open, retry exhausted, SLO breach) that line coverage misses.
-- **detect-secrets** pre-commit hook blocks credentials before they reach the remote.
-
-### Graceful Handling & Timeouts
-- Every HTTP request has an explicit `(connect_timeout, read_timeout)` tuple.
-- Timeout exceptions are caught, duration is logged, test fails clearly.
-- Dual-strategy Circuit Breaker (Redis/In-Memory) prevents cascading failures during upstream outages.
-
-### Security — Zero Trust
-- No credentials, tokens, or URLs in source code.
-- Pydantic `FrameworkSettings` reads exclusively from environment variables.
-- `API_BASE_URL` is validated at startup: any non-localhost URL that is not `https://` raises `ValueError` before a single test runs. The auth token is never transmitted over plaintext.
-- `set_auth_token()` enforces the same HTTPS check at the client level — belt-and-suspenders against programmatic bypass.
-- Sensitive headers (Authorization, Cookie, X-API-Key) are masked in logs.
-- Credential fields inside request/response bodies (`password`, `token`, `secret`, …) are masked by the same processor — header masking alone would leak the `/auth` password at DEBUG level.
-- SSL verification is architecturally non-negotiable — `verify=False` is impossible.
-
-### Contract Testing
-- Every API response is deserialized through a Pydantic model.
-- Schema drift (renamed field, wrong type, missing required field) fails immediately.
-- `PartialBookingPayload` (`extra="forbid"`, all-optional, `exclude_none=True`) ensures PATCH requests are schema-validated before any HTTP call.
-- Separate `contract` test suite distinguishes schema failures from logic failures.
-
-### SLO Enforcement
-- Every response is checked against `SLO_RESPONSE_TIME_MS`.
-- A 200 that took 5 seconds is treated as a failure, with `correlation_id` in the exception message.
-
----
-
-## Local Setup
-
-### Option A: Native Python (Windows/macOS/Linux)
-Runs the suite locally using the fallback In-Memory circuit breaker. Perfect for rapid development.
-
-```bash
-# 1. Clone and enter the repository
-git clone <your-repo-url>
-cd api-testing-framework
-
-# 2. Create a virtual environment (Don't skip this, trust me)
-python -m venv .venv
-source .venv/bin/activate       # macOS/Linux
-.venv\Scripts\activate          # Windows
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Configure environment (NEVER commit .env)
-cp .env.example .env
-# Edit .env with your API values
-
-# 5. Run tests in parallel across all CPU cores
-pytest -n auto -v
-
-# 6. (Optional) Install pre-commit hooks
-pip install pre-commit && pre-commit install
-```
-
-### Option B: Docker Environment (Enterprise CI Parity)
-Runs the exact immutable container image used in CI, alongside a Redis instance for the distributed circuit breaker.
-
-```bash
-# 1. Configure environment
-cp .env.example .env
-
-# 2. Run the full suite with Docker Compose
-docker-compose up --build
-
-# 3. Run specific test categories
-docker-compose run --rm api-tests pytest -m crud -v
-docker-compose run --rm api-tests pytest -m contract -v
-```
-
-### Option C: Kubernetes
-```bash
-# 1. Create the secrets
-kubectl create secret generic api-test-secrets \
-  --from-literal=API_BASE_URL=https://your-api.internal \
-  --from-literal=API_USERNAME=your-username \
-  --from-literal=API_PASSWORD=your-password
-
-# 2. Run the Job
-kubectl apply -f k8s/test-job.yaml
-kubectl logs -f job/api-test-suite
-```
-
-### Performance Baseline (Locust)
-```bash
-pip install -r requirements.txt -r requirements-perf.txt
-
-locust -f tests/performance/locustfile.py \
-    --headless --users 30 --spawn-rate 5 --run-time 5m \
-    --host https://restful-booker.herokuapp.com
-```
-
----
-
-## CI/CD — GitHub Actions
-
-### Why the API Tests Job Shows a Failure in This Repository
-
-The `API Tests` job in the public CI run will show a failure. This is intentional and expected.
-
-This repository is a portfolio demonstration of the framework's architecture and CI/CD gate design. It is not connected to a live API. The three secrets required to execute the test suite — `API_BASE_URL`, `API_USERNAME`, and `API_PASSWORD` — are deliberately not configured on this public repository.
-
-Every gate that can be validated without live credentials passes:
-
-| Job | Status | Why |
-|---|---|---|
-| Security Audit (CVE Scan) | Passes | No credentials needed — scans `requirements.txt` |
-| Code Quality (Ruff + MyPy) | Passes | No credentials needed — static analysis only |
-| Build & Cache Docker Image | Passes | No credentials needed — builds from source |
-| API Tests | Fails at credential validation | `API_BASE_URL`, `API_USERNAME`, `API_PASSWORD` not set |
-
-The pipeline fails loudly at the credential validation step with a clear error message — `Missing GitHub Secrets: ['API_BASE_URL', 'API_USERNAME', 'API_PASSWORD']` — which is the correct behavior. A pipeline that silently skips tests and reports green when credentials are absent would be a significantly worse design.
-
-**To run the full suite against a real endpoint:** fork the repository, add the three secrets in `Settings → Secrets and variables → Actions`, and re-run the pipeline. The Restful-Booker public API at `https://restful-booker.herokuapp.com` requires no registration and accepts `admin` / `password123` as credentials.
-
----
-
-### Required Secrets
-
-| Secret | Required | Description |
-|---|---|---|
-| `API_BASE_URL` | Yes | Full base URL of the target API |
-| `API_USERNAME` | Yes | Auth username |
-| `API_PASSWORD` | Yes | Auth password |
-| `API_TOKEN` | No | Optional pre-issued token — skips the `/auth` round-trip if set |
-| `SSL_CA_BUNDLE` | No | Path to a custom CA bundle for private CAs |
-
-### Pipeline Stages
-1. **Security Audit** — `pip-audit` scans all dependencies for CVEs. Nothing proceeds if a vulnerability is found.
-2. **Code Quality** — Ruff lint + MyPy type check on `src/` and `config/`. Runs in parallel with Docker build. A type error blocks test execution the same way a CVE does.
-3. **Docker Build** — Multi-stage image built and pushed to GHCR with BuildKit layer caching. Image is tagged with the commit SHA for exact traceability.
-4. **API Tests** — Full suite runs inside the built image. Secrets are injected as env vars, never written to disk or CLI arguments. Artifacts (JSONL logs, HTML report, JUnit XML, leaked_resources.txt) uploaded unconditionally.
-5. **Regression Notification** — On scheduled-run failure, a GitHub Issue is opened automatically with labels `regression`, `automated`, `needs-triage`.
-
----
-
-## Extending for a Real Financial System
-
-| Area | Extension |
-|---|---|
-| **Auth** | Replace token auth with OAuth2/mTLS in `booking_client.authenticate()` |
-| **Environments** | Add `env`-scoped `FrameworkSettings` subclasses for dev/staging/prod SLOs |
-| **Pact** | Export Pydantic models to a Pact broker for consumer-driven contracts |
-| **Performance** | Point `locustfile.py` at a staging environment; set SLO thresholds per endpoint |
-| **Alerting** | POST the structured JSONL log to a webhook on failure |
-| **Scale** | Replace in-memory circuit breaker with Redis-backed impl for multi-node runners |
-
----
-
-## The War Stories / I Shot Myself in the Foot
-
-Look, I'm not going to sit here and pretend this architecture materialized perfectly out of thin air. Real engineering is messy, and I tripped over my own shoelaces a few times building this. Here is the unfiltered truth about the bugs we squashed so you don't have to:
-
-1. **The "Oops, Global Install" Disaster:** Yeah, I got a bit too fast in the terminal and accidentally ran `pip install -r requirements.txt` directly into my global Windows Python environment because I forgot to activate my virtual environment (`.venv`). It triggered a massive dependency conflict cascade. Lesson learned: always isolate your environment. Always.
-2. **The `fcntl` Trap:** While building the `pytest-xdist` parallel execution lock, I tried to be clever and used `fcntl` for process coordination. Guess what? `fcntl` is a Unix-only kernel call. It blew up spectacularly the second I ran it natively on my Windows machine. I had to rip it out and replace it with the cross-platform `filelock` package so it works flawlessly everywhere.
-3. **The "Production-Ready" Reality Check:** It hit me hard during debugging: "Production-Ready" doesn't just mean your code runs perfectly on a pristine Linux server inside a Docker container. It means the system is resilient enough that it won't crash when someone clones the repo onto their Windows laptop and runs `pytest` out of the box. Graceful degradation (like falling back to an in-memory circuit breaker when Redis isn't found) is a feature, not an afterthought.
-
-### The "Localhost is a Lie" Reality Check
-
-Let's not kid ourselves: passing 100% of tests using pristine, synthetic `Faker` data in a local sandbox is great, but the real internet is a chaotic, stochastic jungle.
-
-I am not going to insult your intelligence by quoting some arbitrary "expect a 1% variance" metric when moving to production. The unfiltered truth? I don't know the exact failure rate you'll see in the wild, because I haven't pointed this at *your* specific infrastructure yet. It could run flawlessly, or the transition from synthetic data to live traffic could metaphorically blow your arm off.
-
-Here is what actually happens when you leave the deterministic vacuum of local testing:
-
-* **The WAF Wall:** Real-world firewalls (Cloudflare, Akamai) do not care about your `pytest-xdist` parallel execution. If you fire a high-concurrency async battery from a single IP, the WAF will classify you as a DDoS attack and throttle you into the ground.
-* **The Legacy DB Trap:** `Faker` generates beautifully chaotic, high-entropy UTF-8 payloads. Your upstream 10-year-old `latin1` database backend might just choke on them and throw a 500 Internal Server Error.
-* **The Network Jitter:** Real packets traverse unpredictable BGP hops. Synthetic local packets don't. Your perfectly tuned `read_timeout` settings *will* occasionally get breached simply by the physics of internet routing.
-
-**The SRE Takeaway:** This framework is a precision instrument, but it assumes a baseline of deterministic sanity. If you are pointing this at a live production system for the first time, run a single-threaded Canary Probe with known-good static data first. Do not unleash the full concurrent stochastic battery on day one and act surprised when the pager goes off.
+Before sharing source, run `python scripts/check_publication.py`. The optional
+`python scripts/export_source.py` creates a reviewed working-source ZIP in a new
+sandbox directory without Git metadata or ignored runtime material. Inspect the
+archive before publication; the check does not erase remote Git history.

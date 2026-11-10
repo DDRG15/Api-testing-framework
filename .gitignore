@@ -1,15 +1,23 @@
 # Secrets — NEVER commit these
 .env
+.env.*
+!.env.example
+*.env
 *.pem
 *.key
 *.crt
+*.p12
+*.pfx
 
 # Python artifacts
+.venv/
 __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+node_modules/
 dist/
 build/
 
@@ -19,6 +27,7 @@ reports/
 allure-results/
 allure-report/
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
 
@@ -30,6 +39,11 @@ htmlcov/
 .idea/
 *.swp
 
-# Personal docs — audience-specific explainers and pitch, not for the repo
-EXPLAINER.md
-PITCH.md
+# Runtime databases and operating-system metadata
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+.DS_Store
+Thumbs.db

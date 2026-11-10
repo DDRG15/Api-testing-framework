@@ -8,17 +8,16 @@
 #   build time. A broken upstream Debian package will fail your CI pipeline
 #   even if you changed zero lines of code. This is a reproducibility failure.
 #
-#   The correct mental model: the BASE IMAGE is the unit of security patching,
-#   not individual packages inside a running build. When CVEs are found in
-#   base packages, you update the pinned digest (see below) and rebuild.
-#   This is done on a schedule (weekly/monthly), not on every test run.
+#   Base-image updates and installed-package updates both need review.
+#   When a base-image issue is identified, review a replacement digest
+#   and rebuild. This file does not implement a scheduled image scan.
 #
 # ADDED: SHA256 digest pin
 #   The base image is pinned to an exact content-addressable digest.
 #   `python:3.11-slim` is a mutable tag — it changes when Python pushes a
 #   new patch release. The same tag resolves to a different image tomorrow.
-#   A digest pin means the image is immutable. `docker pull` on the same
-#   digest always produces the same bytes, on any machine, at any time.
+#   A digest selects a content-addressed base-image reference. Platform
+#   selection, apt repositories and resolved dependencies still affect builds.
 #
 # HOW TO UPDATE THE PIN (run this before bumping):
 #   make pin-base-image
@@ -27,22 +26,21 @@
 #   docker inspect python:3.11-slim --format='{{index .RepoDigests 0}}'
 #   # Replace the sha256:... below with the new digest.
 #
-# SECURITY PATCHING WORKFLOW:
-#   1. A CVE scanner (Trivy, Snyk, Grype) runs weekly via a separate CI job.
-#   2. If a critical CVE is found in the base image, a PR is opened that
-#      bumps the SHA256 digest to the patched image version.
-#   3. The PR triggers a full test run. If tests pass, the pin is merged.
-#   This gives you both reproducibility AND a documented security patch trail.
+# IMAGE UPDATE GUIDANCE (not an implemented automation):
+#   1. Inspect the base image and installed packages with a chosen scanner.
+#   2. Review a replacement digest and dependency updates when needed.
+#   3. Build and test the resulting image before adopting it.
+#   The existing Python dependency audit does not validate this image.
 #
 # CURRENT PIN:
 #   python:3.11-slim @ sha256:a3ab0b96...e49ac0 (pinned 2026-06-06)
 #   Re-pin monthly or when a CVE is found. See Makefile target `pin-base-image`.
 # =============================================================================
 
-# Pinned to exact digest for reproducible, deterministic builds.
+# Pin the base-image reference; this alone does not make builds deterministic.
 # To update: run `make pin-base-image` and replace the digest below.
-# DO NOT use `python:3.11-slim` without a digest — mutable tags are not
-# acceptable in a production CI pipeline.
+# Review digest updates explicitly; a mutable tag can select a different
+# base image on a later build.
 FROM python:3.11-slim@sha256:a3ab0b966bc4e91546a033e22093cb840908979487a9fc0e6e38295747e49ac0 AS base
 
 # ─── Metadata labels ───────────────────────────────────────────────────────
@@ -91,11 +89,8 @@ RUN pip install --upgrade pip --no-cache-dir \
 FROM base AS runtime
 
 # ─── Non-root user ───────────────────────────────────────────────────────────
-# Running as root in a container is rejected by:
-#   - Kubernetes PodSecurityPolicy (securityContext.runAsNonRoot: true)
-#   - OPA Gatekeeper / Kyverno cluster policies
-#   - CIS Docker Benchmark (Rule 4.1)
-# uid/gid 1001 avoids conflicts with common system accounts.
+# This image selects uid/gid 1001 for its runtime process.
+# Cluster admission rules and host volume permissions need separate review.
 RUN groupadd --gid 1001 testrunner \
     && useradd --uid 1001 --gid testrunner \
                --shell /bin/bash \
@@ -123,8 +118,8 @@ USER testrunner
 VOLUME ["/app/logs", "/app/reports"]
 
 # ─── Health check ────────────────────────────────────────────────────────────
-# Validates the runtime environment before the container is marked healthy.
-# Checks that all critical imports resolve — catches broken installs early.
+# Checks selected Python imports before reporting container health.
+# It does not contact the target API or validate every runtime dependency.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c \
         "import pytest, requests, pydantic, structlog, tenacity, faker; print('OK')" \

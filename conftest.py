@@ -1,55 +1,29 @@
 """
-conftest.py
-============
-The framework's central configuration and fixture hub.
+Pytest fixtures and phase-result recording.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  AUDIT FIXES IMPLEMENTED IN THIS FILE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Health-check workers coordinate through a run-scoped FileLock and result file.
+A worker reuses an existing result after acquiring the lock. This relies on a
+shared filesystem and normal process execution; cross-platform runtime behavior
+requires validation on each supported platform.
 
-  FIX 1 — xdist Health Check (was: fires once per worker, hammers API)
-  ─────────────────────────────────────────────────────────────────────
-  The `health_check` fixture now uses `filelock.FileLock` — a cross-platform
-  file locking library (Windows, Linux, macOS) — to ensure exactly ONE health
-  check fires across all xdist workers, regardless of how many parallel workers
-  are spawned. All other workers wait on the lock and then read the result from
-  a JSON result file. If the health check fails, the result is broadcast to all
-  workers. No fcntl, no OS-specific calls.
+External fixtures authenticate, create synthetic resources and attempt cleanup.
+Cleanup uses a circuit-bypassing client, retains unresolved IDs and writes known
+leaks for recovery. Finalizers cannot guarantee deletion during provider failure
+or forced process termination. Offline mode avoids external authentication and
+orphan sweeps.
 
-  FIX 2 — Teardown Deadlock (was: orphan_cleanup used circuit-protected client)
-  ──────────────────────────────────────────────────────────────────────────────
-  `orphan_cleanup` now uses `DirectApiClient` — a subclass of ApiClient that
-  is instantiated WITHOUT a circuit breaker. It bypasses circuit state entirely.
-  A tripped circuit means the API was down during the test run. Cleanup must
-  attempt to reach the server regardless, using its own independent retry config.
-  If the API is still down, cleanup failures are logged as CRITICAL and the
-  booking IDs are written to a `leaked_resources.txt` file for manual recovery.
-
-  FIX 3 — Circuit Breaker Distributed State
-  ──────────────────────────────────────────
-  `shared_circuit_breaker` now calls `make_circuit_breaker()`, which returns
-  a Redis-backed instance when REDIS_URL is set (parallel mode) and an
-  in-memory instance when it is not (single-process mode). The fixture logs
-  which mode is active so operators can verify their configuration.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Fixture scoping:
-  session  → Once per test run (or once per xdist worker for session fixtures,
-             except health_check which uses a file lock for true once-only).
-  function → One per test. Fresh client, fresh booking client, fresh data.
-
-Teardown guarantee:
-  Every resource-creating fixture uses yield + finally.
-  Teardown failures are logged but never re-raised.
-  The orphan registry and leak file are the last lines of defence.
+The breaker factory selects Redis-backed state when configured, otherwise
+in-memory state. Real Redis behavior needs separate integration evidence.
+Controller hooks retain setup/call/teardown phases, attempts and run context.
 """
 from __future__ import annotations
 
+import hashlib
 import json
-import tempfile
+import os
 import time
 from collections.abc import Generator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -60,16 +34,24 @@ from src.client.base_client import ApiClient
 from src.client.booking_client import BookingClient
 from src.models.booking import BookingPayload
 from src.utils.circuit_breaker import make_circuit_breaker
+from src.utils.contracts import contract_digest
 from src.utils.logger import RUN_ID, configure_logging, get_logger
+from src.utils.run_context import capture_context, source_hashes
+from src.utils.test_results import report_event
 
 logger = get_logger(__name__)
 
 # Path to write IDs that could not be cleaned up during this run.
-_LEAK_FILE = Path("logs/leaked_resources.txt")
+_LEAK_FILE = Path(settings.log_file).parent / "leaked_resources.txt"
 
 # File-system lock path for xdist-safe health check coordination.
-_HEALTH_CHECK_LOCK = Path(tempfile.gettempdir()) / "api_fw_health_check.lock"
-_HEALTH_CHECK_RESULT = Path(tempfile.gettempdir()) / "api_fw_health_check.result"
+_COORDINATION = Path(settings.log_file).parent / "coordination" / RUN_ID
+_HEALTH_CHECK_LOCK = _COORDINATION / "health_check.lock"
+_HEALTH_CHECK_RESULT = _COORDINATION / "health_check.result"
+_RESULT_CONTEXT = {}
+_RESULT_FILE = None
+_WORKER = False
+_DIRECT_CONTEXT = None
 
 
 # ===========================================================================
@@ -159,10 +141,10 @@ def shared_circuit_breaker():
 def health_check(shared_circuit_breaker, pytestconfig) -> None:
     """
     ─── FIX 1: xdist-Safe Health Check (cross-platform) ─────────────────────
-    Fires exactly ONCE across ALL workers on Windows, Linux, and macOS.
+    Reuses one completed result across workers sharing the run directory.
 
     Uses the `filelock` PyPI package — a pure cross-platform file locking
-    library with no OS-specific calls (no fcntl, no win32api).
+    library that hides platform-specific locking behind a common API.
 
     Protocol:
       LEADER  — the first worker to acquire the lock with timeout=0.
@@ -179,7 +161,7 @@ def health_check(shared_circuit_breaker, pytestconfig) -> None:
         zero platform conditionals in our code.
 
     Without this fix: N workers × 1 health check = N simultaneous API hits.
-    With this fix:    exactly 1 hit, always, on every OS.
+    Intended behavior: one completed probe per run coordination directory.
     """
     _HEALTH_CHECK_LOCK.parent.mkdir(parents=True, exist_ok=True)
     lock = FileLock(str(_HEALTH_CHECK_LOCK))
@@ -189,10 +171,12 @@ def health_check(shared_circuit_breaker, pytestconfig) -> None:
         # the lock is already held by another worker.
         lock.acquire(timeout=0)
         # ── LEADER PATH ──────────────────────────────────────────────────
-        # We are the first worker. Run the check and write the result so
-        # followers can read it after we release.
+        # A late worker can acquire an already released lock. Reuse the
+        # completed result instead of probing again.
         try:
-            _run_health_check_and_write_result(shared_circuit_breaker)
+            if not _HEALTH_CHECK_RESULT.exists():
+                _run_health_check_and_write_result(shared_circuit_breaker)
+            _read_health_check_result()
         finally:
             lock.release()  # Release before followers proceed
 
@@ -297,7 +281,8 @@ _orphan_registry: list[int] = []
 
 
 def register_for_cleanup(booking_id: int) -> None:
-    _orphan_registry.append(booking_id)
+    if booking_id not in _orphan_registry:
+        _orphan_registry.append(booking_id)
 
 
 def deregister_from_cleanup(booking_id: int) -> None:
@@ -308,7 +293,7 @@ def deregister_from_cleanup(booking_id: int) -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def orphan_cleanup(auth_token: str) -> Generator[None, None, None]:
+def orphan_cleanup(request: pytest.FixtureRequest) -> Generator[None, None, None]:
     """
     ─── FIX 2: Teardown Deadlock Fix ─────────────────────────────────────────
     Uses DirectApiClient which has NO circuit breaker attached.
@@ -324,6 +309,10 @@ def orphan_cleanup(auth_token: str) -> Generator[None, None, None]:
     If a delete still fails (API truly unavailable), the booking ID is written
     to logs/leaked_resources.txt with the run_id for manual recovery.
     """
+    if os.environ.get("FRAMEWORK_OFFLINE") == "1":
+        yield
+        return
+    auth_token = request.getfixturevalue("auth_token")
     yield  # All tests run here
 
     if not _orphan_registry:
@@ -477,7 +466,7 @@ def created_booking(
     unique_booking_payload: BookingPayload,
 ) -> Generator[tuple[int, BookingPayload], None, None]:
     """
-    Creates a booking, yields it to the test, then guarantees deletion.
+    Creates a booking, yields it to the test, then attempts deletion.
     Uses DirectApiClient for teardown so a tripped circuit does not prevent
     cleanup (Fix 2 applied at the fixture level as well).
 
@@ -494,7 +483,6 @@ def created_booking(
         yield booking_id, unique_booking_payload
     finally:
         _safe_delete_booking_direct(booking_id)
-        deregister_from_cleanup(booking_id)
 
 
 def _safe_delete_booking_direct(booking_id: int) -> None:
@@ -503,14 +491,9 @@ def _safe_delete_booking_direct(booking_id: int) -> None:
     Logs all outcomes. Never re-raises — teardown must not mask test failures.
     """
     teardown_client = DirectApiClient()
-    teardown_client.set_auth_token(
-        # Re-authenticate for teardown to avoid stale token edge cases
-        # In practice this is the same token; the cost is negligible.
-        _get_cached_teardown_token()
-    )
-    teardown_booking = BookingClient(teardown_client)
-
     try:
+        teardown_client.set_auth_token(_get_cached_teardown_token())
+        teardown_booking = BookingClient(teardown_client)
         if teardown_booking.booking_exists(booking_id):
             teardown_booking.delete_booking(booking_id)
             logger.info("fixture_teardown_deleted", booking_id=booking_id)
@@ -520,6 +503,7 @@ def _safe_delete_booking_direct(booking_id: int) -> None:
                 booking_id=booking_id,
                 note="Booking already absent — test may have deleted it intentionally.",
             )
+        deregister_from_cleanup(booking_id)
     except Exception as exc:
         logger.error(
             "fixture_teardown_failed",
@@ -565,13 +549,15 @@ def _get_cached_teardown_token() -> str:
                 note="Re-authenticating. Previous token exceeded TTL.",
             )
         _auth_client = DirectApiClient()
-        _booking = BookingClient(_auth_client)
-        _teardown_token_cache = _booking.authenticate(
-            username=settings.api_username,
-            password=settings.api_password,
-        )
-        _teardown_token_obtained_at = now
-        _auth_client.close()
+        try:
+            _booking = BookingClient(_auth_client)
+            _teardown_token_cache = _booking.authenticate(
+                username=settings.api_username,
+                password=settings.api_password,
+            )
+            _teardown_token_obtained_at = now
+        finally:
+            _auth_client.close()
     return _teardown_token_cache
 
 
@@ -581,34 +567,93 @@ def _get_cached_teardown_token() -> str:
 
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:
-    """Structured log line for every test outcome — no result disappears."""
-    if report.when == "call":
-        outcome = "passed" if report.passed else ("failed" if report.failed else "skipped")
-        log_fn = logger.info if report.passed else logger.error
-
-        log_fn(
-            "test_result",
-            test_id=report.nodeid,
-            outcome=outcome,
-            duration_s=round(report.duration, 4),
-            run_id=RUN_ID,
-            **({"failure_details": str(report.longrepr)} if report.failed else {}),
-        )
+    """Controller records each phase once, including reruns and teardown failures."""
+    if _WORKER:
+        return
+    event = report_event(report, _RESULT_CONTEXT)
+    if _RESULT_FILE is not None:
+        with _RESULT_FILE.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(event, sort_keys=True) + "\n")
+    logger.info("test_phase", **{k: v for k, v in event.items() if k != "event"})
 
 
 def pytest_configure(config: pytest.Config) -> None:
     """Register custom markers."""
+    global _RESULT_FILE, _RESULT_CONTEXT, _WORKER
+    os.environ.setdefault("FRAMEWORK_RUN_ID", RUN_ID)
+    _WORKER = _is_xdist_worker(config)
+    _RESULT_CONTEXT = {
+        "run_id": RUN_ID,
+        "revision": os.environ.get("FRAMEWORK_REVISION", os.environ.get("GITHUB_SHA", "unknown")),
+        "environment": os.environ.get("FRAMEWORK_ENVIRONMENT", "unspecified"),
+        "contract_digest": contract_digest(),
+        "context_digest": os.environ.get("FRAMEWORK_CONTEXT_DIGEST"),
+        "run_started_utc": os.environ.get("FRAMEWORK_RUN_STARTED_UTC", datetime.now(UTC).isoformat()),
+    }
+    if not _WORKER:
+        results_dir = Path(os.environ.get("FRAMEWORK_RESULTS_DIR", str(Path(settings.log_file).parent)))
+        results_dir.mkdir(parents=True, exist_ok=True)
+        _RESULT_FILE = results_dir / f"results-{RUN_ID}.jsonl"
     config.addinivalue_line("markers", "crud: Full CRUD lifecycle tests")
     config.addinivalue_line("markers", "contract: Schema/contract validation tests")
     config.addinivalue_line("markers", "smoke: Quick sanity checks")
     config.addinivalue_line("markers", "slo: SLO enforcement tests")
 
 
+def pytest_collection_finish(session: pytest.Session) -> None:
+    """Capture direct serial invocations too; unknown selection stays unverified."""
+    global _DIRECT_CONTEXT
+    if _WORKER or _RESULT_CONTEXT.get("context_digest") or not session.items:
+        return
+    if getattr(session.config.option, "numprocesses", None):
+        return
+    keys = (
+        "api_version", "request_connect_timeout", "request_read_timeout",
+        "retry_max_attempts", "retry_base_delay_seconds", "retry_max_delay_seconds",
+        "slo_response_time_ms", "circuit_breaker_failure_threshold",
+        "circuit_breaker_recovery_timeout_seconds", "log_level",
+    )
+    configuration = {key: str(getattr(settings, key)) for key in keys}
+    for label, value in (("target", settings.api_base_url),
+                         ("tls_ca", settings.ssl_ca_bundle), ("redis", settings.redis_url)):
+        configuration[f"{label}_sha256"] = hashlib.sha256(str(value).encode()).hexdigest()
+    _DIRECT_CONTEXT = capture_context(
+        Path(__file__).parent, _RESULT_CONTEXT["environment"],
+        sorted(item.nodeid for item in session.items), configuration,
+    )
+    _RESULT_CONTEXT["context_digest"] = _DIRECT_CONTEXT["context_digest"]
+    if _RESULT_FILE is not None:
+        provenance = {**_DIRECT_CONTEXT, **_RESULT_CONTEXT}
+        _RESULT_FILE.with_name(f"provenance-{RUN_ID}.json").write_text(
+            json.dumps(provenance, indent=2) + "\n", encoding="utf-8",
+        )
+
+
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Clean up xdist coordination files after the session."""
+    if _WORKER:
+        return
+    if _DIRECT_CONTEXT is not None and _RESULT_FILE is not None:
+        changed = source_hashes(Path(__file__).parent) != _DIRECT_CONTEXT["source_sha256"]
+        if changed and _RESULT_FILE.exists():
+            records = [json.loads(line) for line in _RESULT_FILE.read_text().splitlines() if line.strip()]
+            for record in records:
+                record["context_digest"] = None
+                record["source_changed_during_run"] = True
+            _RESULT_FILE.write_text("".join(json.dumps(record) + "\n" for record in records))
+        provenance_file = _RESULT_FILE.with_name(f"provenance-{RUN_ID}.json")
+        if provenance_file.exists():
+            provenance = json.loads(provenance_file.read_text())
+            provenance["source_changed_during_run"] = changed
+            provenance["provenance_valid"] = not changed
+            provenance_file.write_text(json.dumps(provenance, indent=2) + "\n")
     for path in (_HEALTH_CHECK_LOCK, _HEALTH_CHECK_RESULT):
         try:
             if path.exists():
                 path.unlink()
         except OSError:
             pass
+    try:
+        _COORDINATION.rmdir()
+    except OSError:
+        pass

@@ -17,14 +17,14 @@ Usage:
         --users 30 \
         --spawn-rate 5 \
         --run-time 5m \
-        --host https://restful-booker.herokuapp.com
+        --host https://api.example.com
 
     # Interactive UI (opens browser at http://localhost:8089)
     locust -f tests/performance/locustfile.py \
-        --host https://restful-booker.herokuapp.com
+        --host https://api.example.com
 
 Environment variables:
-    API_BASE_URL   — target host (overrides --host if set)
+    API_BASE_URL   — required framework configuration; keep aligned with --host
     API_USERNAME   — auth username
     API_PASSWORD   — auth password
 """
@@ -58,13 +58,13 @@ class BookingLoadUser(HttpUser):
     """
     Simulates a single concurrent user against the booking API.
 
-    Task weights reflect a realistic read-heavy traffic pattern:
+    Task weights define a sample read-heavy traffic mix:
       - list_bookings:  weight 3  (browsing / search)
-      - create+delete:  weight 2  (write cycle — always cleaned up)
+      - create+delete:  weight 2  (write cycle with a deletion attempt)
       - get_booking:    weight 5  (detail page — most common)
 
-    wait_time: 1–3 seconds between tasks — mimics human pacing,
-    avoids hammering the free-tier Heroku API into rate limiting.
+    wait_time: 1–3 seconds between tasks. Configure load and obtain permission
+    for the target; this delay does not guarantee avoidance of rate limits.
     """
 
     wait_time = between(1, 3)
@@ -99,7 +99,7 @@ class BookingLoadUser(HttpUser):
 
     @task(2)
     def create_and_delete_booking(self) -> None:
-        """POST /booking → DELETE /booking/{id} — full write cycle, always cleaned up."""
+        """Attempt POST then DELETE; failures can leave a booking behind."""
         payload = self._factory.realistic()
         try:
             response = self._booking_client.create_booking(payload)

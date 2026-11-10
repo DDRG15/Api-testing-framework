@@ -4,7 +4,7 @@
 # Design constraints:
 #   - Non-root execution (uid 1001 = testrunner, matches Dockerfile USER)
 #   - All credentials injected from a Kubernetes Secret, never hardcoded
-#   - Resource limits prevent noisy-neighbour impact in shared clusters
+#   - Resource limits bound this job; cluster isolation needs separate review
 #   - automountServiceAccountToken: false — this job needs no k8s API access
 #   - restartPolicy: Never — a failed run must not silently retry and hide
 #     a flapping test. Investigate the failure, don't auto-bury it.
@@ -28,9 +28,9 @@ metadata:
     app: api-test-suite
     component: testing
 spec:
-  # A failed job stays visible for 1 hour for log retrieval, then is cleaned up.
+  # Request cleanup one hour after completion; the cluster TTL controller performs it.
   ttlSecondsAfterFinished: 3600
-  # Never auto-retry — a test failure is a signal, not a transient condition.
+  # Disable automatic Job retries so failed executions remain visible.
   backoffLimit: 0
 
   template:
@@ -58,7 +58,7 @@ spec:
           # Pin to the exact image digest built by CI for reproducibility.
           # Replace <DIGEST> with the sha256 digest printed by the build-image
           # CI job (docker/build-push-action emits it as the image digest).
-          image: ghcr.io/ddrg15/enterprise-api-testing-framework/api-test-runner@sha256:<DIGEST>
+          image: ghcr.io/example-org/api-testing-framework/api-test-runner@sha256:<DIGEST>
           imagePullPolicy: Always
 
           command: ["python", "-m", "pytest", "--tb=short", "--verbose", "--timeout=60"]

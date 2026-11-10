@@ -1,45 +1,18 @@
 """
-src/utils/circuit_breaker_redis.py
-=====================================
-Redis-backed circuit breaker for shared state across pytest-xdist workers.
+Redis-backed and in-memory circuit-breaker implementations.
 
-WHY THIS EXISTS — The Concurrency Flaw It Fixes:
-  pytest-xdist achieves parallelism by spinning up isolated Python subprocesses.
-  Each worker has its own memory space. An in-memory circuit breaker means:
-    - Worker 1 counts its own failures: 0 → 1 → 2 → 3 → 4
-    - Worker 2 counts its own failures: 0 → 1 → 2 → 3 → 4
-    - Worker 3 counts its own failures: 0 → 1 → 2 → 3 → 4
-    - Worker 4 counts its own failures: 0 → 1 → 2 → 3 → 4
+Independent worker memory cannot aggregate failures across processes. The Redis
+implementation stores shared state and uses Lua scripts for selected atomic
+transitions; the in-memory implementation coordinates threads within one process.
+Those mechanisms do not establish race-free behavior under every failure mode.
 
-  With threshold=5, the circuit never trips despite 16 real failures.
-  The thundering herd protection is completely bypassed.
+Redis connection or operation failures can allow calls to continue without
+shared protection and emit a warning. That availability tradeoff must be reviewed
+for the target environment. Real Redis coordination requires a separate service
+and has not been established by the controlled offline path.
 
-  This implementation stores state in Redis. All workers share one atomic
-  counter and one state value. The circuit trips correctly at exactly
-  N cumulative failures across the entire worker pool.
-
-ATOMICITY — No Race Conditions:
-  State transitions (CLOSED→OPEN, HALF_OPEN→CLOSED) use Lua scripts executed
-  atomically on the Redis server. There is no TOCTOU window between the check
-  and the set — a race condition that would allow two workers to both believe
-  they are the "recovery probe" in HALF_OPEN state simultaneously.
-
-RESILIENCE — Redis Unavailability:
-  If Redis is unreachable, the circuit breaker silently falls back to
-  ALLOW_ALL mode and logs a warning. The test suite continues running
-  without distributed protection. This is a deliberate trade-off:
-    - Failing the entire test suite because the Redis sidecar is down
-      is worse than running without distributed circuit-breaking.
-    - The fallback is logged clearly so operators can act on it.
-  This mirrors the principle used in production circuit breakers like
-  Netflix Hystrix: when the breaker itself is broken, fail open.
-
-KEY SCHEMA (Redis Hash):
-  Key:   circuit:<name>
-  Fields:
-    state         STRING  CLOSED | OPEN | HALF_OPEN
-    failure_count INT     Cumulative failures since last reset
-    open_since    FLOAT   Unix timestamp when circuit tripped
+Redis hash fields include state, failure_count and open_since. The factory
+selects an implementation according to the configured Redis URL.
 """
 from __future__ import annotations
 
@@ -53,7 +26,7 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
-# Lua scripts — executed atomically by Redis, no TOCTOU possible
+# Lua scripts — selected Redis operations execute atomically on the server
 # ---------------------------------------------------------------------------
 
 # Atomically increment failure count and trip the circuit if threshold is met.
@@ -134,9 +107,9 @@ class RedisCircuitBreaker:
     """
     Distributed circuit breaker backed by Redis.
 
-    Thread-safe within a process (uses a threading.Lock for local critical
-    sections). Process-safe across xdist workers (uses Redis Lua scripts
-    for atomic cross-process state transitions).
+    Uses a threading.Lock for selected local critical sections and Redis Lua
+    scripts for selected cross-process transitions. Distributed behavior needs
+    integration checks against the configured Redis service.
 
     Args:
         name:              Logical name — becomes the Redis key prefix.

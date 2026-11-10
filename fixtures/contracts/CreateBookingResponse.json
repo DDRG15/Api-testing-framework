@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "BookingDates": {
+      "properties": {
+        "checkin": {
+          "format": "date",
+          "title": "Checkin",
+          "type": "string"
+        },
+        "checkout": {
+          "format": "date",
+          "title": "Checkout",
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkin",
+        "checkout"
+      ],
+      "title": "BookingDates",
+      "type": "object"
+    },
+    "BookingResponse": {
+      "description": "Response model for a single booking object.\nIdentical to BookingPayload \u2014 a separate model is intentional:\nrequest and response shapes can diverge without warning.",
+      "properties": {
+        "additionalneeds": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Additionalneeds"
+        },
+        "bookingdates": {
+          "$ref": "#/$defs/BookingDates"
+        },
+        "depositpaid": {
+          "title": "Depositpaid",
+          "type": "boolean"
+        },
+        "firstname": {
+          "title": "Firstname",
+          "type": "string"
+        },
+        "lastname": {
+          "title": "Lastname",
+          "type": "string"
+        },
+        "totalprice": {
+          "title": "Totalprice",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "firstname",
+        "lastname",
+        "totalprice",
+        "depositpaid",
+        "bookingdates"
+      ],
+      "title": "BookingResponse",
+      "type": "object"
+    }
+  },
+  "description": "Wrapper returned by POST /booking.",
+  "properties": {
+    "booking": {
+      "$ref": "#/$defs/BookingResponse"
+    },
+    "bookingid": {
+      "description": "Server-assigned ID. Must be positive.",
+      "exclusiveMinimum": 0,
+      "title": "Bookingid",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "bookingid",
+    "booking"
+  ],
+  "title": "CreateBookingResponse",
+  "type": "object"
+}

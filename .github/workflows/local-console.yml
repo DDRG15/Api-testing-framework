@@ -1,0 +1,50 @@
+name: Local console and MCP
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-connect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Prepare the sandbox framework environment
+        run: |
+          python -m venv "$HOME/sandbox/api-testing/venv"
+          "$HOME/sandbox/api-testing/venv/bin/python" -m pip install -r requirements-dev.txt
+      - name: Check publication candidates and build the React console
+        run: |
+          "$HOME/sandbox/api-testing/venv/bin/python" scripts/check_publication.py
+          "$HOME/sandbox/api-testing/venv/bin/python" scripts/build_console.py --sandbox "$HOME/sandbox/api-testing"
+      - name: Prepare the isolated optional MCP SDK
+        run: |
+          "$HOME/sandbox/api-testing/venv/bin/python" scripts/setup_mcp.py \
+            --sandbox "$HOME/sandbox/api-testing/mcp" \
+            --data-dir "$HOME/sandbox/api-testing/control" > "$RUNNER_TEMP/client-config.local.json"
+      - name: Verify the actual stdio connection
+        run: |
+          "$HOME/sandbox/api-testing/mcp/venv/bin/python" tests/mcp/stdio_smoke.py \
+            --runner-python "$HOME/sandbox/api-testing/venv/bin/python" \
+            --output "$HOME/sandbox/api-testing/mcp-evidence"
+      - name: Upload sanitized connector evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: connector-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ~/sandbox/api-testing/mcp-evidence/check.json
+          if-no-files-found: error

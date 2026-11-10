@@ -1,36 +1,15 @@
 """
-src/utils/data_factory.py
-==========================
-Synthetic test data generation using Faker.
+Synthetic booking data using Faker, UUID fragments and relative dates.
 
-Design principles for Tier-1 test data:
+UUID suffixes reduce collision risk across workers and runs; they do not
+provide a zero-collision guarantee. Human-like names and Unicode variants
+exercise selected input shapes without using real customer records.
 
-  UNIQUENESS     — Every generated payload is structurally unique.
-                   UUID seeds + Faker ensure zero collision probability
-                   across parallel workers, repeated runs, and CI environments.
-
-  REALISM        — Data looks like real production data, not "foo/bar/test123".
-                   Real-looking names and notes surface encoding bugs,
-                   truncation issues, and character-set problems that
-                   "TESTUSER" payloads never expose.
-
-  TRACEABILITY   — Every generated record embeds the run_id in additionalneeds.
-                   If a test fails and leaves orphan data, you can grep the
-                   database for that run_id and know exactly which CI run
-                   created it.
-
-  DETERMINISM    — Passing `seed` makes the Faker-derived fields (names, price,
-                   additionalneeds) reproducible. Identifiers are deliberately
-                   NOT seeded: every payload embeds a fresh uuid4 suffix and
-                   today-relative dates so it stays collision-free across
-                   parallel workers and repeated runs (see UNIQUENESS — the two
-                   properties are in tension and uniqueness wins). To reproduce
-                   a failure, the seed reproduces the field VALUES; the unique
-                   suffix and dates will differ by design.
-
-  BOUNDARY COVERAGE — The factory can generate edge-case payloads on demand:
-                   max-length strings, minimum price (0), Unicode names, etc.
-                   These are not random — they are intentional probes.
+The realistic payload embeds a run identifier for tracing possible leftovers.
+A seed reproduces Faker-derived fields, not the complete payload: UUIDs are
+fresh, dates depend on the current day, and run identifiers can change.
+Boundary methods provide specific length, price and character-set cases; they
+are not exhaustive input-space coverage.
 """
 from __future__ import annotations
 
@@ -55,7 +34,7 @@ _faker_pool = Faker(
 
 class BookingDataFactory:
     """
-    Generates realistic, unique BookingPayload instances for tests.
+    Generates synthetic BookingPayload instances with UUID-suffixed identifiers.
 
     Usage:
         factory = BookingDataFactory()
@@ -68,7 +47,7 @@ class BookingDataFactory:
         """
         Args:
             seed: Optional integer seed for deterministic generation.
-                  If None, a random seed is used and logged for reproducibility.
+                  If None, a random seed is logged to help reproduce Faker-derived fields.
         """
         if seed is None:
             seed = random.randint(0, 2**32 - 1)
@@ -81,7 +60,7 @@ class BookingDataFactory:
             "data_factory_initialized",
             seed=seed,
             run_id=RUN_ID,
-            note="Use this seed to reproduce this exact payload locally.",
+            note="This seed reproduces Faker-derived fields; UUIDs and dates may differ.",
         )
 
     @property
@@ -100,8 +79,8 @@ class BookingDataFactory:
         """
         Generate a realistic booking payload with randomized human-like data.
 
-        The unique_tag (UUID fragment) is embedded in the lastname to guarantee
-        uniqueness without making the data look synthetic in logs.
+        The unique_tag (UUID fragment) is embedded in the lastname to reduce
+        collisions and help distinguish synthetic records.
 
         Args:
             checkin_offset_days: Days from today for checkin date.
@@ -112,7 +91,7 @@ class BookingDataFactory:
         checkout = checkin + timedelta(days=stay_duration_days)
 
         # Embed unique_tag into lastname — searchable in the API without
-        # colliding with real or other-test data
+        # reducing confusion with other records
         firstname = self._faker.first_name()
         lastname = f"{self._faker.last_name()}-{unique_tag}"
 

@@ -1,0 +1,4 @@
+# Optional SDK environment only. Do not combine with the core requirements.
+# SDK 2 requires a newer Pydantic than the framework's contract baseline.
+pip==26.2
+mcp==2.3.0

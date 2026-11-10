@@ -1,0 +1,4 @@
+{"case_id":"synthetic-meal-1","model_id":"synthetic-model","prompt_version":"v1","elapsed_ms":12,"response":{"grams_min":90,"grams_max":110,"parts":[30,70],"total":100}}
+{"case_id":"synthetic-meal-1","model_id":"synthetic-model","prompt_version":"v1","elapsed_ms":14,"response":{"grams_min":85,"grams_max":115,"parts":[40,60],"total":100}}
+{"case_id":"synthetic-meal-1","model_id":"synthetic-model","prompt_version":"v1","elapsed_ms":13,"response":{"grams_min":95,"grams_max":105,"parts":[25,75],"total":100}}
+{"case_id":"synthetic-meal-1","model_id":"synthetic-model","prompt_version":"v2","elapsed_ms":11,"response":{"grams_min":92,"grams_max":108,"parts":[20,80],"total":100}}

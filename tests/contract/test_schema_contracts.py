@@ -3,17 +3,13 @@ tests/contract/test_schema_contracts.py
 =========================================
 Contract tests: verify the API's response shape against our defined schema.
 
-These are NOT functional tests. They don't test business logic.
-They ask one question: "Is the API speaking the language we expect?"
+These cases validate selected API responses against local model constraints.
+They can detect missing required fields and incompatible values, subject to
+Pydantic's coercion rules. They do not establish complete OpenAPI or consumer
+compatibility, and some constraints overlap with functional behavior.
 
-Why this matters for Tier-1 systems:
-  - APIs change. A field gets renamed from `totalprice` to `total_price`.
-  - Without contract tests, functional tests start failing with cryptic
-    KeyErrors weeks later in production.
-  - These tests catch schema drift at the API boundary, immediately.
-
-These run separately from CRUD tests so a schema failure is immediately
-identifiable as "contract problem" vs "logic problem."
+A separate contract-test group helps identify which assertion failed; the group
+alone does not determine whether the client or provider caused the failure.
 """
 from __future__ import annotations
 

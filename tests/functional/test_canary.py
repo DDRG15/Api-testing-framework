@@ -1,13 +1,10 @@
 """
-tests/functional/test_canary.py
-=================================
-Canary probe: single-threaded, static payload against the live API.
+Small live booking probe using a static, synthetic payload.
 
-Used for safe verification against production without triggering WAFs
-or polluting the database with high-entropy synthetic data. The static
-payload uses canonical BookingPayload/BookingDates with proper date
-objects so the full Pydantic validation stack fires — including the
-checkout_must_be_after_checkin invariant.
+The probe creates, reads and attempts to delete one booking. It uses canonical
+BookingPayload/BookingDates models, including the checkout/checkin invariant.
+Run it only against a configured environment that permits test-data mutations.
+A static payload does not guarantee WAF acceptance or cleanup after termination.
 """
 from __future__ import annotations
 
@@ -26,8 +23,8 @@ logger = get_logger(__name__)
 def test_production_canary_probe(booking_client):
     """
     CANARY PROBE: Single-threaded, static payload.
-    Used for safe verification against live production environments without
-    triggering WAFs or polluting the database with high-entropy synthetic data.
+    Creates and attempts to remove test data in an explicitly permitted
+    environment. Provider availability and cleanup are not guaranteed.
     """
     from conftest import deregister_from_cleanup, register_for_cleanup
 
@@ -46,7 +43,7 @@ def test_production_canary_probe(booking_client):
     )
 
     # 1. Create — register for cleanup BEFORE the read so a failed assertion
-    #    cannot leak the booking into a live/production database.
+    #    leaves the ID available for a later cleanup attempt.
     create_response = booking_client.create_booking(static_payload)
     booking_id = create_response.bookingid
     register_for_cleanup(booking_id)

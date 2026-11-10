@@ -1,0 +1,58 @@
+name: Live demo (public sandbox)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 14 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-live-demo
+  cancel-in-progress: false
+
+jobs:
+  live-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      API_BASE_URL: https://restful-booker.herokuapp.com
+      API_USERNAME: admin
+      API_PASSWORD: password123
+      FRAMEWORK_ENVIRONMENT: public-demo
+      FRAMEWORK_RUN_ID: demo-${{ github.run_id }}-${{ github.run_attempt }}
+      FRAMEWORK_RESULTS_DIR: ${{ runner.temp }}/live-demo
+      LOG_FILE: ${{ runner.temp }}/live-demo/logs/http.jsonl
+      PYTHONDONTWRITEBYTECODE: "1"
+      COVERAGE_FILE: ${{ runner.temp }}/live-demo/.coverage
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r requirements.txt
+      - name: Single-thread canary first
+        run: |
+          mkdir -p "$RUNNER_TEMP/live-demo"
+          python -m pytest -o addopts='' --timeout=60 -m smoke tests/functional/test_canary.py \
+            --junitxml="$RUNNER_TEMP/live-demo/canary.xml" \
+            --html="$RUNNER_TEMP/live-demo/canary.html" --self-contained-html
+      - name: CRUD acceptance (only after canary passes)
+        env:
+          FRAMEWORK_RUN_ID: crud-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          python -m pytest -o addopts='' --timeout=60 -m crud tests/functional/test_bookings_crud.py \
+            --junitxml="$RUNNER_TEMP/live-demo/crud.xml" \
+            --html="$RUNNER_TEMP/live-demo/crud.html" --self-contained-html
+      - name: Summarize observed results
+        if: always()
+        run: python scripts/summarize_results.py "$RUNNER_TEMP"/live-demo/results-*.jsonl --output "$RUNNER_TEMP/live-demo"
+      - name: Upload public demo evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-demo-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/live-demo
+          if-no-files-found: error
+          include-hidden-files: true

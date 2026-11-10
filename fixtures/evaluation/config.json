@@ -1,0 +1,18 @@
+{
+  "schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["grams_min", "grams_max", "parts", "total"],
+    "properties": {
+      "grams_min": {"type": "number", "minimum": 0},
+      "grams_max": {"type": "number", "minimum": 0},
+      "parts": {"type": "array", "items": {"type": "number", "minimum": 0}},
+      "total": {"type": "number", "minimum": 0}
+    }
+  },
+  "rules": [
+    {"kind": "ordered_range", "low": "/grams_min", "high": "/grams_max"},
+    {"kind": "sum_equals", "total": "/total", "parts": "/parts", "tolerance": 0.000001}
+  ]
+}

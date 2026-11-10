@@ -13,11 +13,12 @@
 #   docker-compose up --build                        # Full suite
 #   docker-compose --profile parallel up --build     # 4 parallel workers
 #   docker-compose --profile smoke run smoke-tests   # Smoke only
-#   docker-compose down --volumes                    # Teardown + clean volumes
+#   docker-compose down                              # Stop this Compose project
+# Review project-owned volumes separately before removing retained data.
 #
 # Secret injection:
 #   Secrets live in .env (copy from .env.example). docker-compose reads it
-#   automatically. Secrets are NEVER in this file.
+#   automatically. Keep actual credentials out of this configuration.
 # =============================================================================
 
 volumes:
@@ -36,9 +37,9 @@ services:
   #
   # Configuration:
   #   - No persistence (--save ""): test-run state should not outlast a run.
-  #   - Memory limit: 64MB is more than enough for circuit breaker counters.
-  #   - Protected mode off: safe because it is bound to the internal network only,
-  #     never exposed on the host.
+  #   - Memory limit: 64MB configured for this reference service.
+  #   - Protected mode is disabled and no host port is published here.
+  #     Network isolation and access still depend on the deployment.
   # ---------------------------------------------------------------------------
   redis:
     image: redis:7.2-alpine@sha256:8e8716f00de9d12f6e58e96e61050a5bc6ffc7ba5c5b9938d83c63a0ac4f7565
@@ -126,10 +127,9 @@ services:
   # ---------------------------------------------------------------------------
   # Parallel profile — 4 xdist workers, all sharing Redis circuit breaker
   #
-  # This is the proof that Fix 1 works:
-  #   - 4 workers sharing one Redis instance
-  #   - Circuit breaker threshold=5 is evaluated across all 4 workers combined
-  #   - health_check fires exactly once (file-system lock in conftest.py)
+  # Reference configuration for four workers and a shared Redis service.
+  # Runtime validation is required before claiming distributed coordination;
+  # this manifest alone does not demonstrate health-check or breaker behavior.
   #
   # Usage: docker-compose --profile parallel up --build
   # ---------------------------------------------------------------------------

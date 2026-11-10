@@ -1,0 +1,74 @@
+{
+  "$defs": {
+    "BookingDates": {
+      "properties": {
+        "checkin": {
+          "format": "date",
+          "title": "Checkin",
+          "type": "string"
+        },
+        "checkout": {
+          "format": "date",
+          "title": "Checkout",
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkin",
+        "checkout"
+      ],
+      "title": "BookingDates",
+      "type": "object"
+    }
+  },
+  "description": "Request payload model \u2014 used when CREATING or UPDATING a booking.",
+  "properties": {
+    "additionalneeds": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Additionalneeds"
+    },
+    "bookingdates": {
+      "$ref": "#/$defs/BookingDates"
+    },
+    "depositpaid": {
+      "title": "Depositpaid",
+      "type": "boolean"
+    },
+    "firstname": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Firstname",
+      "type": "string"
+    },
+    "lastname": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Lastname",
+      "type": "string"
+    },
+    "totalprice": {
+      "maximum": 1000000,
+      "minimum": 0,
+      "title": "Totalprice",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "firstname",
+    "lastname",
+    "totalprice",
+    "depositpaid",
+    "bookingdates"
+  ],
+  "title": "BookingPayload",
+  "type": "object"
+}

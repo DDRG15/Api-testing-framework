@@ -1,14 +1,11 @@
 """
-src/models/booking.py
-======================
-Pydantic v2 data models for the Restful-Booker API.
+Pydantic models for selected Restful-Booker request and response shapes.
 
-These models serve as the API CONTRACT. Every response is deserialized
-through these models. If the API changes its schema — a field is renamed,
-a type changes, a required field is removed — the test fails HERE with
-a clear ValidationError, not buried in a KeyError inside an assertion.
-
-This is "shift-left contract testing" without a separate Pact broker.
+Domain methods and contract tests validate supported responses through these
+models. Missing required fields and incompatible values can raise ValidationError.
+Acceptance depends on each model's constraints and Pydantic coercion rules;
+these models do not provide complete provider or consumer compatibility testing.
+Versioned JSON Schema snapshots are maintained separately.
 """
 from __future__ import annotations
 

@@ -1,0 +1,16 @@
+{
+  "description": "Response from POST /auth.",
+  "properties": {
+    "token": {
+      "description": "Session token for privileged operations.",
+      "minLength": 1,
+      "title": "Token",
+      "type": "string"
+    }
+  },
+  "required": [
+    "token"
+  ],
+  "title": "AuthTokenResponse",
+  "type": "object"
+}

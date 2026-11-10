@@ -11,18 +11,18 @@
 # Docker layer caching strategy:
 #   - The image is built once in 'build-image' and pushed to GitHub's container
 #     registry (ghcr.io) with the commit SHA as the tag.
-#   - 'api-tests' pulls that exact image — no rebuild, guaranteed identical env.
+#   - 'api-tests' pulls the built image by digest; runtime settings still differ.
 #   - BuildKit cache-from/cache-to reuses the pip install layer between runs,
 #     cutting build time from ~90s to ~8s when only test code changes.
 #
 # Secret injection:
 #   - Secrets come exclusively from GitHub Secrets → environment variables.
-#   - They are NEVER written to disk, printed to stdout, or passed as CLI args.
+#   - Avoid writing or printing secret values; inspect diagnostics before sharing.
 #   - GitHub's log masking automatically redacts secret values from all output.
 #   - The validation step checks for presence before any test runs, giving a
 #     clear error message instead of a cryptic downstream failure.
 #
-# Artifacts (always uploaded, pass or fail — "no data disappears"):
+# Artifact upload is attempted after success or failure when the job can continue:
 #   - JSONL structured log  → ingestible by any SIEM
 #   - HTML test report      → human-readable summary
 #   - JUnit XML             → GitHub's native test result display
@@ -69,7 +69,6 @@ concurrency:
 env:
   PYTHON_VERSION: "3.11"
   REGISTRY: ghcr.io
-  IMAGE_NAME: ddrg15/enterprise-api-testing-framework/api-test-runner
   # Opt into Node.js 24 now — Node.js 20 is forced off on 2026-06-02.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   REQUEST_CONNECT_TIMEOUT: "5"
@@ -166,10 +165,19 @@ jobs:
       # not whatever 'latest' resolves to at pull time — a subtle race condition.
       image-digest: ${{ steps.build.outputs.digest }}
       image-tag: ${{ steps.meta.outputs.tags }}
+      image-name: ${{ steps.image.outputs.name }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Resolve the repository image name
+        id: image
+        shell: bash
+        run: |
+          image="${GITHUB_REPOSITORY,,}/api-test-runner"
+          echo "IMAGE_NAME=$image" >> "$GITHUB_ENV"
+          echo "name=$image" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker BuildKit
         uses: docker/setup-buildx-action@v3
@@ -276,7 +284,7 @@ jobs:
       # Using --digest ensures we run the EXACT image from the build job,
       # not a newer image that may have been pushed concurrently.
       #
-      # Secrets are passed via --env flags — never written to disk.
+      # Docker receives secret values through the selected process environment.
       # -----------------------------------------------------------------------
       - name: Run API test suite in Docker
         env:
@@ -319,12 +327,12 @@ jobs:
             --memory="512m" \
             --cpus="2" \
             \
-            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-image.outputs.image-digest }}" \
+            "${{ env.REGISTRY }}/${{ needs.build-image.outputs.image-name }}@${{ needs.build-image.outputs.image-digest }}" \
             python -m pytest --tb=short --verbose --timeout=60 $MARKER_FLAG
 
       # -----------------------------------------------------------------------
-      # Artifact upload — ALWAYS runs, even on test failure.
-      # This is the "no data disappears into the void" CI guarantee.
+      # Artifact upload is attempted even when an earlier test step fails.
+      # Runner termination or upload failure can still prevent artifact retention.
       # A failed run without logs is an unresolvable failure.
       # -----------------------------------------------------------------------
       - name: Upload structured JSONL logs

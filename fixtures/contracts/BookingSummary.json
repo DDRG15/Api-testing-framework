@@ -1,0 +1,15 @@
+{
+  "description": "Lightweight item in the GET /booking list response.",
+  "properties": {
+    "bookingid": {
+      "exclusiveMinimum": 0,
+      "title": "Bookingid",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "bookingid"
+  ],
+  "title": "BookingSummary",
+  "type": "object"
+}

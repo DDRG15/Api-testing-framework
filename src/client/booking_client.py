@@ -1,15 +1,11 @@
 """
-src/client/booking_client.py
-==============================
-Domain-specific client for the Restful-Booker API.
+Domain adapter for selected Restful-Booker booking and authentication routes.
 
-Wraps ApiClient with typed methods that return validated Pydantic models.
-Tests never call requests directly — they call this client and receive
-typed, validated objects. Schema drift is caught at deserialization.
-
-This layer also isolates tests from HTTP mechanics: a test that calls
-`create_booking()` doesn't know or care about status codes — it receives
-a `CreateBookingResponse` or a clear exception.
+Wraps ApiClient with operations that check expected statuses and validate
+supported response bodies through Pydantic models. This centralizes part of
+the HTTP/schema handling; some operations return status-derived values rather
+than model objects. Local model validation does not detect every possible
+provider contract change.
 """
 from __future__ import annotations
 
@@ -35,8 +31,8 @@ _M = TypeVar("_M", bound=BaseModel)
 
 class BookingClient:
     """
-    All interactions with /booking and /auth endpoints.
-    Returns typed Pydantic models. Raises on non-2xx or schema violations.
+    Supported /booking and /auth operations.
+    Model-returning methods validate their bodies; other methods check statuses.
     """
 
     def __init__(self, api_client: ApiClient) -> None:

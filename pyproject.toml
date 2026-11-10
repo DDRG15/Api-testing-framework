@@ -9,7 +9,7 @@
 # Tools configured here:
 #   Ruff   — linting + import sorting (replaces flake8 + isort)
 #   MyPy   — static type checking scoped to src/ and config/
-#   pytest-cov — branch coverage with 80% gate
+#   pytest-cov — combined coverage with branch measurement and an 80% gate
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ warn_unused_ignores = true      # flag stale # type: ignore comments
 exclude = ["^tests/", "^conftest\\.py$"]
 
 # ---------------------------------------------------------------------------
-# Coverage — 80% branch coverage gate
+# Coverage — 80% combined gate with branch measurement enabled
 # ---------------------------------------------------------------------------
 [tool.coverage.run]
 source = ["src", "config"]

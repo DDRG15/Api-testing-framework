@@ -1,40 +1,21 @@
 """
-src/client/base_client.py
-==========================
-The core HTTP client for the entire framework.
+HTTP client with bounded retries, timeouts and diagnostic context.
 
-This is the most critical module. Every design decision here affects
-test reliability, observability, and security. Key guarantees:
+Requests use configured connect/read timeouts and TLS verification. These
+settings bound individual network waits, not an entire test's wall-clock time.
+Retries apply to selected statuses (429, 502, 503, 504) and network exceptions
+only when method semantics or explicit replay permission allow repetition.
+A server-side deduplication contract is required before replaying unsafe methods.
 
-  1. ZERO INFINITE HANGS    — explicit (connect, read) timeout on every call.
-  2. SMART RETRY            — retries ONLY on transient infrastructure errors
-                              (502, 503, 504, connection error, timeout).
-                              NEVER retries logic errors (4xx). Retrying a 401
-                              14 times is noise, not resilience.
-  3. 429 RATE-LIMIT AWARE   — if the server sends Retry-After, the client
-                              sleeps EXACTLY that duration before retrying.
-                              Ignoring Retry-After is a protocol violation and
-                              gets your IP banned on Tier-1 financial APIs.
-  4. CIRCUIT BREAKER        — after N consecutive failures, fail-fast.
-                              No thundering herd against a degraded upstream.
-  5. FULL OBSERVABILITY     — on ANY failure: URL, method, headers (masked),
-                              payload, status, response body, elapsed time,
-                              and correlation ID are all logged.
-  6. SLO ENFORCEMENT        — responses that arrive "successfully" but too slowly
-                              are treated as failures.
-  7. CORRELATION IDs        — every request carries X-Correlation-ID so that
-                              a single test's traffic can be traced end-to-end.
-  8. STRICT SSL             — verify= is NEVER False. CA bundle is configurable.
+Retry-After accepts delta-seconds or an HTTP date. A configured maximum caps
+the wait, so the actual delay can be shorter than the server's requested delay.
+The optional circuit breaker rejects calls while open; its protection depends
+on the configured implementation and state scope.
 
-429 / Retry-After design note:
-  RFC 7231 §7.1.3 defines two valid formats for the Retry-After header:
-    - Delta-seconds: "Retry-After: 120"
-    - HTTP-date:     "Retry-After: Wed, 21 Oct 2025 07:28:00 GMT"
-
-  Both are parsed. The resulting sleep is capped at settings.retry_max_delay_seconds
-  to prevent a malicious or misconfigured server from issuing a sleep-forever
-  instruction — a subtle denial-of-service vector in rate-limited environments.
-  This cap override is always logged as a warning.
+Structured logs include request context at the configured level, with masking
+for selected credentials and URL details. They do not establish a complete
+upstream trace or guarantee removal of every sensitive value. The configured
+per-response elapsed-time threshold is an assertion, not a statistical SLA.
 """
 from __future__ import annotations
 
@@ -92,6 +73,14 @@ logger = get_logger(__name__)
 #: HTTP status codes that represent transient server-side failures.
 TRANSIENT_STATUS_CODES: frozenset[int] = frozenset({429, 502, 503, 504})
 
+# RFC 9110 section 9.2.2: automatic replay requires idempotent semantics.
+IDEMPOTENT_METHODS: frozenset[str] = frozenset({"GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"})
+
+
+def _can_retry(method: str, retry_safe: bool) -> bool:
+    """Explicit opt-in asserts the target deduplicates this operation server-side."""
+    return method.upper() in IDEMPOTENT_METHODS or retry_safe
+
 #: Exception types that indicate a network-level transient failure.
 TRANSIENT_EXCEPTIONS: tuple[type[Exception], ...] = (
     RequestsConnectionError,
@@ -106,7 +95,7 @@ def _is_transient_failure(exc: BaseException) -> bool:
     Return True ONLY for infrastructure-level transients.
 
     Logic errors (400, 401, 403, 404, 409) must NOT be retried —
-    they are deterministic failures that will not resolve on their own.
+    this policy does not treat those statuses as retryable.
     """
     if isinstance(exc, TRANSIENT_EXCEPTIONS):
         return True
@@ -195,11 +184,8 @@ class _RetryAfterWait(wait_base):
          YES → sleep exactly that duration (capped at max_delay for safety).
          NO  → delegate to exponential backoff.
 
-    This is the correct way to be a "good citizen" API consumer.
-    Respecting Retry-After:
-      - Prevents IP bans on production APIs with strict rate limiters.
-      - Reduces load on stressed upstream services.
-      - Is required by RFC 6585 and expected by all major API gateways.
+    The wait is a bounded retry policy, not a guarantee of provider acceptance
+    or availability. A capped wait can be shorter than the server requests.
     """
 
     def __init__(self, fallback: wait_base, max_delay: float) -> None:
@@ -311,6 +297,7 @@ class ApiClient:
         json: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
         correlation_id: str | None = None,
+        retry_safe: bool = False,
     ) -> Response:
         """
         Execute an HTTP request with the full resilience stack applied.
@@ -322,7 +309,10 @@ class ApiClient:
             CircuitBreakerOpenError: Circuit is OPEN; upstream considered down.
             requests.exceptions.Timeout: Server exceeded configured timeout.
             AssertionError: Response time exceeded the SLO threshold.
-            RetryError: All retry attempts exhausted.
+            RetriesExhaustedError: An eligible operation exhausted its retry budget.
+
+        POST/PATCH are sent once unless retry_safe=True explicitly declares
+        server-side replay protection. A header alone does not establish that contract.
         """
         cid = correlation_id or str(uuid.uuid4())
         url = f"{self._base_url}{path}"
@@ -358,7 +348,9 @@ class ApiClient:
         # ------------------------------------------------------------------
         try:
             for attempt in Retrying(
-                retry=retry_if_exception(_is_transient_failure),
+                retry=retry_if_exception(
+                    lambda exc: _can_retry(method, retry_safe) and _is_transient_failure(exc)
+                ),
                 stop=stop_after_attempt(settings.retry_max_attempts),
                 wait=smart_wait,
                 reraise=True,
@@ -390,13 +382,14 @@ class ApiClient:
         # (and RetryError defensively) and convert to the public exhaustion
         # error so the internal type never leaks and the CID is always present.
         except (_TransientHttpError, RetryError) as exc:
+            attempts = settings.retry_max_attempts if _can_retry(method, retry_safe) else 1
             log.error(
                 "request_exhausted_retries",
-                max_attempts=settings.retry_max_attempts,
+                max_attempts=attempts,
                 last_exception=str(exc),
             )
             raise RetriesExhaustedError(
-                f"All {settings.retry_max_attempts} retry attempts exhausted "
+                f"All {attempts} permitted attempts exhausted "
                 f"for {method.upper()} {url}. [correlation_id={cid}]"
             ) from exc
         except CircuitBreakerOpenError:
@@ -404,7 +397,7 @@ class ApiClient:
             raise
 
         # ------------------------------------------------------------------
-        # SLO enforcement — a slow 200 is still an incident.
+        # Per-response latency assertion, independent of HTTP success status.
         # ------------------------------------------------------------------
         elapsed_ms = int(response.elapsed.total_seconds() * 1000)
         if elapsed_ms > settings.slo_response_time_ms:
@@ -543,6 +536,12 @@ class ApiClient:
 
     def get(self, path: str, **kwargs: Any) -> Response:
         return self.request("GET", path, **kwargs)
+
+    def __enter__(self) -> ApiClient:
+        return self
+
+    def __exit__(self, *exc_info: Any) -> None:
+        self.close()
 
     def post(self, path: str, **kwargs: Any) -> Response:
         return self.request("POST", path, **kwargs)

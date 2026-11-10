@@ -1,0 +1,108 @@
+{
+  "$defs": {
+    "BookingDates": {
+      "properties": {
+        "checkin": {
+          "format": "date",
+          "title": "Checkin",
+          "type": "string"
+        },
+        "checkout": {
+          "format": "date",
+          "title": "Checkout",
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkin",
+        "checkout"
+      ],
+      "title": "BookingDates",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload model for PATCH /booking/{id}.\n\nAll fields are optional \u2014 only provided fields are sent to the API.\nextra=\"forbid\" ensures unknown fields raise ValidationError before any\nHTTP call is made, keeping PATCH in line with the full PUT contract.",
+  "properties": {
+    "additionalneeds": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Additionalneeds"
+    },
+    "bookingdates": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BookingDates"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "depositpaid": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Depositpaid"
+    },
+    "firstname": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Firstname"
+    },
+    "lastname": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lastname"
+    },
+    "totalprice": {
+      "anyOf": [
+        {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Totalprice"
+    }
+  },
+  "title": "PartialBookingPayload",
+  "type": "object"
+}

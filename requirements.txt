@@ -1,6 +1,6 @@
 # =============================================================================
 # requirements.txt
-# All versions are pinned for reproducibility across local, Docker, and CI.
+# Direct dependency versions are pinned; transitive resolution can still change.
 # Update policy: run `pip-audit` on every dependency bump before merging.
 # =============================================================================
 
@@ -22,7 +22,7 @@ jsonschema==4.23.0
 Faker==26.1.0               # Realistic, locale-aware test data generation
 
 # --- Cross-platform file locking (xdist health check coordination) ---
-filelock==3.20.3            # FileLock: works on Windows, Linux, macOS — no fcntl
+filelock==4.2.1            # FileLock: works on Windows, Linux, macOS — no fcntl
 
 # --- Redis (distributed circuit breaker for xdist) ---
 redis==5.0.8

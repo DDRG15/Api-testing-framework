@@ -1,0 +1,20 @@
+{
+  "properties": {
+    "checkin": {
+      "format": "date",
+      "title": "Checkin",
+      "type": "string"
+    },
+    "checkout": {
+      "format": "date",
+      "title": "Checkout",
+      "type": "string"
+    }
+  },
+  "required": [
+    "checkin",
+    "checkout"
+  ],
+  "title": "BookingDates",
+  "type": "object"
+}

@@ -1,16 +1,13 @@
-"""
-config/settings.py
-==================
-Single source of truth for all framework configuration.
+"""Validated framework settings for configured and synthetic execution.
 
-Loads from environment variables (populated by .env locally and
-GitHub Secrets in CI). Fails immediately at import time if any
-required variable is absent — no silent misconfigurations.
-
-Design principle: "Fail loud at startup, never fail silently mid-test."
+Configured execution reads environment variables and optional local .env values;
+missing required values or invalid settings can fail initialization. Offline mode
+ignores .env and supplies synthetic loopback credentials, with Redis disabled.
+Individual operations may still perform their own runtime validation.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -20,15 +17,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Load .env only if it exists (local dev). In CI, vars are injected directly.
 _env_path = Path(__file__).parent.parent / ".env"
-if _env_path.exists():
+if _env_path.exists() and os.environ.get("FRAMEWORK_OFFLINE") != "1":
     load_dotenv(_env_path, override=False)
 
 
 class FrameworkSettings(BaseSettings):
     """
-    All settings are sourced from environment variables.
-    Pydantic validates types and raises a clear error manifest
-    if anything is missing or malformed — before any test runs.
+    Accept explicit values or configured environment sources.
+    Pydantic validates declared field types and constraints during initialization.
+    Synthetic offline defaults are selected by the module's loader.
     """
 
     model_config = SettingsConfigDict(
@@ -194,7 +191,14 @@ class FrameworkSettings(BaseSettings):
 # Module-level singleton. Fails hard at import if configuration is invalid.
 # ---------------------------------------------------------------------------
 try:
-    settings = FrameworkSettings()  # type: ignore[call-arg]
+    if os.environ.get("FRAMEWORK_OFFLINE") == "1":
+        settings = FrameworkSettings(  # type: ignore[call-arg]
+            _env_file=None,
+            api_base_url="http://127.0.0.1",
+            api_username="offline", api_password="offline", api_token=None, redis_url=None,
+        )
+    else:
+        settings = FrameworkSettings()  # type: ignore[call-arg]
 except ValidationError as exc:
     # Narrowed to ValidationError so a genuine config problem gets this clear
     # message, while an unrelated bug (e.g. an AttributeError) surfaces normally

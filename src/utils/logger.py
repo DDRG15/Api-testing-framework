@@ -1,26 +1,22 @@
 """
-src/utils/logger.py
-====================
-Structured JSON logging subsystem.
+Structured JSON logging with run and request correlation identifiers.
 
-Design decisions:
-  - Every log line is a JSON object — ingestible by Splunk/Datadog/CloudWatch
-    without a parsing rule.
-  - Sensitive headers (Authorization, Cookie, X-API-Key, etc.) are masked
-    BEFORE they ever reach the log sink. Credentials cannot leak through logs.
-  - Each test run gets a unique `run_id` bound to every log line for
-    cross-filtering in log aggregation systems.
-  - Correlation IDs are propagated from the HTTP client through to the log,
-    allowing a full request trace to be reconstructed from logs alone.
+Configured framework logging emits JSON records at the selected log level.
+Processors redact selected header/body credential keys and URL details before
+serialization. Review application-specific sensitive fields before sharing logs.
+Correlation IDs connect the framework's request events when retained; a complete
+upstream trace also requires support and evidence from the target service.
 """
 from __future__ import annotations
 
 import logging
+import os
 import re
 import sys
 import uuid
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import urlsplit, urlunsplit
 
 import structlog
 from structlog.types import EventDict, WrappedLogger
@@ -42,14 +38,14 @@ _SENSITIVE_HEADER_PATTERNS: list[re.Pattern[str]] = [
 
 _MASK = "***REDACTED***"
 
-# Body keys whose values are credentials and must never reach a log sink.
-# Matched case-insensitively against the top-level keys of request/response bodies.
+# Body keys redacted recursively from configured request/response mappings.
+# Matching is case-insensitive; unrecognized sensitive fields need separate review.
 _SENSITIVE_BODY_KEYS: frozenset[str] = frozenset(
     {"password", "token", "secret", "authorization", "api_key", "apikey"}
 )
 
 # One unique ID per test-runner process invocation.
-RUN_ID: str = str(uuid.uuid4())
+RUN_ID: str = os.environ.get("FRAMEWORK_RUN_ID") or str(uuid.uuid4())
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +57,7 @@ def _mask_sensitive_headers(
 ) -> EventDict:
     """
     Structlog processor: redacts sensitive HTTP headers in-place.
-    Applied before any sink — headers are NEVER written unmasked.
+    Applied to configured request/response header mappings before serialization.
     """
     for key in ("request_headers", "response_headers"):
         headers: dict[str, str] | None = event_dict.get(key)
@@ -85,17 +81,40 @@ def _mask_sensitive_body(
 
     Header masking is not enough — the POST /auth body carries the password,
     and a DEBUG-level log of that request would otherwise write the credential
-    verbatim into the JSONL sink (and the retained CI artifact). Masking the
-    envelope while mailing the letter is not masking. This closes that path.
+    verbatim into the JSONL sink. Recognized nested credential fields are
+    masked here; this is not a general-purpose classifier for sensitive data.
     """
     for key in ("request_body", "response_body"):
         body = event_dict.get(key)
-        if isinstance(body, dict):
-            event_dict[key] = {
-                k: (_MASK if str(k).lower() in _SENSITIVE_BODY_KEYS else v)
-                for k, v in body.items()
-            }
+        if isinstance(body, (dict, list)):
+            event_dict[key] = _redact_nested(body)
     return event_dict
+
+
+def _redact_nested(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: (_MASK if str(key).lower() in _SENSITIVE_BODY_KEYS else _redact_nested(item))
+                for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_redact_nested(item) for item in value]
+    if isinstance(value, str):
+        def safe_url(match: re.Match[str]) -> str:
+            try:
+                parsed = urlsplit(match.group())
+                authority = parsed.netloc.rsplit("@", 1)[-1]
+                return urlunsplit((parsed.scheme, authority, parsed.path,
+                                   "REDACTED" if parsed.query else "", ""))
+            except ValueError:
+                return _MASK
+        return re.sub(r"\b(?:https?|rediss?|postgres(?:ql)?)://[^\s\"<>]+", safe_url, value)
+    return value
+
+
+def _mask_sensitive_metadata(
+    logger: WrappedLogger, method: str, event_dict: EventDict,
+) -> EventDict:
+    """Remove URL userinfo/query values, including nested metadata and errors."""
+    return cast(EventDict, _redact_nested(event_dict))
 
 
 def _inject_run_id(
@@ -140,6 +159,7 @@ def configure_logging(log_file: str, log_level: str = "INFO") -> None:
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
+        _mask_sensitive_metadata,
     ]
 
     structlog.configure(

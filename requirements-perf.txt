@@ -2,7 +2,7 @@
 # requirements-perf.txt — Performance testing dependencies
 #
 # Kept separate from requirements.txt intentionally.
-# Locust adds ~15 packages and is NEVER needed in the functional test image.
+# Locust adds dependencies that are not needed by the functional test image.
 # Installing it in CI adds startup overhead and expands the CVE audit surface.
 #
 # Install with:

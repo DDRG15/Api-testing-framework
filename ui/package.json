@@ -1,0 +1,10 @@
+{
+  "name": "api-testing-console",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {"build": "vite build", "dev": "vite --host 127.0.0.1"},
+  "dependencies": {"react": "19.3.1", "react-dom": "19.3.1"},
+  "devDependencies": {"vite": "8.3.6"}
+}
