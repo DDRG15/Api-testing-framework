@@ -114,7 +114,7 @@ These tests create and delete bookings. The template contains placeholders:
 replace the URL, credentials and log path with your test configuration. The
 public-demo workflow separately declares its demonstration values. Configure
 Redis when parallel workers need shared breaker state. The in-memory breaker
-shares state only within its process. See [configuration and publication](docs/CONFIGURATION.md).
+shares state only within its process. See [configuration](docs/CONFIGURATION.md).
 
 These bounded commands clear the general `addopts`; they do not attempt to satisfy the full-suite coverage gate. The configured integration workflow retains its own policy.
 
@@ -168,7 +168,7 @@ Exit code 0 requires nonempty input with every record valid. Invalid records, sc
 |---|---|
 | [offline-tests.yml](.github/workflows/offline-tests.yml) | Reproducible checks and artifacts without relying on a public API. |
 | [live-demo.yml](.github/workflows/live-demo.yml) | Separate public demo, starting with a canary; external failures remain visible. |
-| [api-tests.yml](.github/workflows/api-tests.yml) | Configured integration: dependency audit, static analysis, Docker image, and tests using environment secrets. |
+| [api-tests.yml](.github/workflows/api-tests.yml) | Dependency audit, static analysis, and Docker image on every push. The integration tests run on manual dispatch, after you configure the environment secrets. |
 | [local-console.yml](.github/workflows/local-console.yml) | Build the locked React frontend and test the optional MCP stdio connection in isolated environments. |
 
 The configured integration validates `API_BASE_URL`, `API_USERNAME`, and `API_PASSWORD` before running. Missing configuration fails explicitly. Workflow files describe intended execution; consult actual runs and artifacts for results.
@@ -180,10 +180,11 @@ The project also includes a Locust baseline in `tests/performance/locustfile.py`
 ## Source layout
 
 ```text
-api-lab                            Linux launcher for the local console and MCP setup
+api-lab                            Linux launcher for the console and MCP setup
 assets/                            Application icon
 config/settings.py                 Validated configuration
 src/client/                        HTTP client and domain adapters
+src/control/                       Local operation service and HTTP adapter
 src/models/booking.py              Booking models
 src/utils/                         Contracts, results, data, breaker, and oracle
 tests/unit/                        Unit tests
@@ -195,17 +196,9 @@ tests/mcp/                         MCP stdio smoke check
 tests/performance/                 Locust baseline
 fixtures/contracts/                Versioned model schemas
 fixtures/evaluation/               Synthetic evaluation configuration and inputs
-scripts/                           Execution and reporting tools
-src/control/                       Shared local operation service and HTTP adapter
+scripts/                           Execution, reporting, and setup tools
 ui/                                React console source and dependency lockfile
-docs/ARCHITECTURE.md               Current architecture and component guide
-docs/architecture.html             Standalone interactive architecture
-docs/                              Console, Connections, MCP, launcher and configuration guides
+docs/                              Architecture, console, Connections, MCP, launcher, and configuration guides
 k8s/                               Kubernetes Job manifest
 .github/workflows/                 CI workflows
 ```
-
-Before sharing source, run `python scripts/check_publication.py`. The optional
-`python scripts/export_source.py` creates a reviewed working-source ZIP in a new
-sandbox directory without Git metadata or ignored runtime material. Inspect the
-archive before publication; the check does not erase remote Git history.

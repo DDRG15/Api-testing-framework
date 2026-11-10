@@ -22,16 +22,18 @@ jobs:
       API_PASSWORD: password123
       FRAMEWORK_ENVIRONMENT: public-demo
       FRAMEWORK_RUN_ID: demo-${{ github.run_id }}-${{ github.run_attempt }}
-      FRAMEWORK_RESULTS_DIR: ${{ runner.temp }}/live-demo
-      LOG_FILE: ${{ runner.temp }}/live-demo/logs/http.jsonl
       PYTHONDONTWRITEBYTECODE: "1"
-      COVERAGE_FILE: ${{ runner.temp }}/live-demo/.coverage
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - run: python -m pip install -r requirements.txt
+      - name: Set output paths
+        run: |
+          echo "FRAMEWORK_RESULTS_DIR=$RUNNER_TEMP/live-demo" >> "$GITHUB_ENV"
+          echo "LOG_FILE=$RUNNER_TEMP/live-demo/logs/http.jsonl" >> "$GITHUB_ENV"
+          echo "COVERAGE_FILE=$RUNNER_TEMP/live-demo/.coverage" >> "$GITHUB_ENV"
       - name: Single-thread canary first
         run: |
           mkdir -p "$RUNNER_TEMP/live-demo"

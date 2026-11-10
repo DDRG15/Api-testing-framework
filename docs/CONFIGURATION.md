@@ -1,4 +1,4 @@
-# Configuration and publication
+# Configuration
 
 ## Replace placeholders for external tests
 
@@ -31,37 +31,24 @@ repository. The Kubernetes manifest deliberately uses `example-org` and
 `<DIGEST>` placeholders: replace both with a reviewed image before deployment.
 No image is built or deployed simply by editing these templates locally.
 
-## Inspect publication candidates
+## Scan for secrets
 
 ```bash
 python scripts/check_publication.py
 python scripts/check_publication.py --json
 ```
 
-The guard checks both index content and working copies, plus non-ignored new
-files. It reports category, path and line, never the matched value. It checks
-credential/key patterns, URL credentials, personal home paths, non-example email
-literals and tracked files covered by local ignore rules. Ignored files are not
-read. Symlinks, unmerged entries and unsupported large files require review.
+The scan checks tracked files, working copies and non-ignored new files for
+credential and key patterns, URL credentials, personal home paths and non-example
+email addresses. It reports category, path and line, never the matched value.
+Set `PUBLICATION_BLOCK_TERMS` to a comma-separated list of extra literal terms to
+block. It is pattern detection: it cannot prove that no sensitive value exists.
 
-For additional identity checks, set `PUBLICATION_BLOCK_TERMS` locally to a
-comma-separated list of your own literal identifiers. Do not commit the list.
-The guard is bounded pattern detection; it cannot prove the absence of all
-sensitive information and does not scan or rewrite Git history.
-
-## Export working source for review
+## Source archive
 
 ```bash
 python scripts/export_source.py
 ```
 
-This creates a new sandbox directory containing `source.zip` and a hash manifest.
-It checks the publication candidates first, rechecks the exact text bytes it
-packages and omits Git metadata and ignored content. Paths inside the archive and
-manifest are relative to the checkout. The source ZIP contains current working
-files, including publishable new files, rather than a historical Git snapshot.
-
-Review the archive and its manifest before sharing. Generated host configuration
-and raw runtime evidence remain local; exporting does not remove anything from
-an existing remote repository or from earlier commits. Publishing and historical
-cleanup are separate decisions.
+Runs the scan, then writes `source.zip` and a hash manifest to a new directory.
+The archive omits Git metadata and ignored files.
