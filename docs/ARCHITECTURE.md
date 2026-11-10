@@ -178,7 +178,7 @@ The optional [local console](LOCAL_CONSOLE.md) and [MCP adapter](MCP.md) share a
 
 ## Rebuild and check the viewer
 
-Rendering tools are optional development dependencies. Use an existing shared Mermaid CLI installation outside this repository. Select its paths explicitly; keep generated outputs and browser profiles in sandbox. With those tools and a local browser available:
+Rendering tools are optional development dependencies. Rendering needs Mermaid CLI; pass its paths explicitly; keep generated outputs and browser profiles in sandbox. With those tools and a local browser available:
 
 ```bash
 # Set MMDC to the existing CLI and RENDERER_TOOLS to its package directory.

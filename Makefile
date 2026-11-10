@@ -118,7 +118,7 @@ build-console: require-env ## Build locked frontend assets entirely in sandbox
 mcp-setup: require-env ## Prepare the isolated optional SDK and print local client configuration
 	"$(PYTHON)" scripts/setup_mcp.py --sandbox "$(SANDBOX_DIR)/mcp" --data-dir "$(SANDBOX_DIR)/control"
 
-publication: require-env ## Check index and working publication candidates without printing values
+publication: require-env ## Scan tracked and new files for secrets without printing values
 	"$(PYTHON)" scripts/check_publication.py
 
 export-source: require-env ## Create a new source archive without Git metadata or ignored files

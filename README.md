@@ -1,6 +1,6 @@
 # API Testing Framework
 
-A personal REST API testing toolkit built with Python, pytest, and Pydantic. It checks response contracts, HTTP client resilience, and persisted effects, then preserves evidence for each phase and attempt.
+A REST API testing toolkit built with Python, pytest, and Pydantic. It checks response contracts, HTTP client resilience, and persisted effects, then preserves evidence for each phase and attempt.
 
 Licensed under the [MIT License](LICENSE). Third-party dependencies retain their own
 licenses.
@@ -13,6 +13,8 @@ Linux users can run `./api-lab setup`, then `./api-lab start`. The optional
 `./api-lab install` adds an application-menu entry. See the
 [Linux launcher guide](docs/LINUX_LAUNCHER.md) for dependencies, shutdown and MCP
 entrypoints. The launcher uses Python and Node.js; it is not a standalone binary.
+It requires Python 3.11+. Runtime data lives under `~/sandbox/` by default,
+outside the checkout.
 
 Create a sandbox environment and install the core toolchain:
 

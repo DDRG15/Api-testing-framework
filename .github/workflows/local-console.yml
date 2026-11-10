@@ -27,7 +27,7 @@ jobs:
         run: |
           python -m venv "$HOME/sandbox/api-testing/venv"
           "$HOME/sandbox/api-testing/venv/bin/python" -m pip install -r requirements-dev.txt
-      - name: Check publication candidates and build the React console
+      - name: Scan for secrets and build the React console
         run: |
           "$HOME/sandbox/api-testing/venv/bin/python" scripts/check_publication.py
           "$HOME/sandbox/api-testing/venv/bin/python" scripts/build_console.py --sandbox "$HOME/sandbox/api-testing"

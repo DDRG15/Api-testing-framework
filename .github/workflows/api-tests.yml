@@ -29,7 +29,7 @@
 #
 # Triggers:
 #   - push to main / develop
-#   - pull_request to main (blocks merge on failure)
+#   - pull_request to main (audit, static analysis, image build)
 #   - manual dispatch (environment + marker selection)
 #   The api-tests job runs only on manual dispatch: it needs environment
 #   secrets (API_BASE_URL, API_USERNAME, API_PASSWORD). Push and pull requests
@@ -69,7 +69,7 @@ concurrency:
 env:
   PYTHON_VERSION: "3.11"
   REGISTRY: ghcr.io
-  # Opt into Node.js 24 now — Node.js 20 is forced off on 2026-06-02.
+  # Run JavaScript actions on Node.js 24.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   REQUEST_CONNECT_TIMEOUT: "5"
   REQUEST_READ_TIMEOUT: "20"
@@ -224,7 +224,7 @@ jobs:
           provenance: false  # Suppress SBOM provenance attestation for simplicity
 
   # ===========================================================================
-  # Job 3: Run the test suite inside the exact image we just built
+  # Job 4: Run the test suite inside the exact image we just built
   # ===========================================================================
   api-tests:
     name: "API Tests (${{ github.event.inputs.environment || 'staging' }})"
@@ -381,38 +381,3 @@ jobs:
           comment_mode: always
           check_run_annotations: all tests, skipped tests
           job_summary: true
-
-      # -----------------------------------------------------------------------
-      # Post a structured failure comment on the PR so reviewers have
-      # immediate context without navigating to the Actions tab.
-      # -----------------------------------------------------------------------
-      - name: Post failure summary to PR
-        if: failure() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const sha = context.sha.substring(0, 7);
-            const body = [
-              '## ❌ API Test Suite — Failed',
-              '',
-              `| Field | Value |`,
-              `|---|---|`,
-              `| **Run** | [#${context.runId}](${runUrl}) |`,
-              `| **Commit** | \`${sha}\` |`,
-              `| **Environment** | ${{ github.event.inputs.environment || 'staging' }} |`,
-              `| **Triggered by** | ${context.actor} |`,
-              '',
-              '**Artifacts available in the run above:**',
-              '- `test-logs-*.jsonl` — Full structured log with request/response details',
-              '- `html-report-*.html` — Visual test report',
-              '',
-              '> This PR cannot be merged until all API tests pass.',
-            ].join('\n');
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body,
-            });
